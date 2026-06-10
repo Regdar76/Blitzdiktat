@@ -45,7 +45,7 @@ The intent is not to ship a one-click finished app. The intent is to make a real
 ## Setup
 
 ```bat
-git clone https://github.com/cmagnussen/blitztext-app.git
+
 cd blitztext-app\BlitzdiktatWin
 pip install -r requirements.txt
 ```
