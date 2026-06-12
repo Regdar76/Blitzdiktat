@@ -1,7 +1,5 @@
-# Trademarks And Branding
+# Namen und Branding
 
-The source code in this repository is licensed under the MIT License.
+Der Quellcode steht unter MIT-Lizenz ([LICENSE](LICENSE)).
 
-The project name, app name, logos, icons, and visual identity are not granted as trademarks or brand assets by the MIT License.
-
-You may fork the code under the license terms. If you publish a fork as a separate app or service, use your own name, icon, and branding unless you have explicit permission.
+Projekt- und App-Namen („Blitzdiktat", „Blitztext"), Logos, Icons und die visuelle Identität sind davon ausgenommen und werden durch die MIT-Lizenz nicht als Marken- oder Brand-Rechte gewährt. Wer den Code (mit Erlaubnis) weiterverwendet und als eigene App veröffentlicht, nutzt eigene Namen, Icons und Branding.

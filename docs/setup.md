@@ -1,23 +1,23 @@
-# Setup
+# Setup (Windows)
 
-This guide is for people who want to run and inspect the preview themselves.
+Einrichtung der Windows-App auf einem neuen Rechner. Für Android und macOS siehe das jeweilige README ([Android](../BlitzdiktatAndroid/README.md) · [macOS](../BlitztextMac/README.md)).
 
-## 1. Requirements
+## 1. Voraussetzungen
 
-- Windows 11 (Windows 10 likely works too)
-- Python 3.11 or newer
-- A microphone
-- For local transcription: `faster-whisper` (see step 3)
-- For online transcription and all rewriting workflows: an OpenAI API key
+- Windows 11 (Windows 10 funktioniert wahrscheinlich auch)
+- Python 3.11 oder neuer
+- Ein Mikrofon
+- Für lokale Transkription: `faster-whisper` (Schritt 3)
+- Für Online-Transkription und alle Schreib-Workflows: ein OpenAI API Key
 
-## 2. Clone And Install
+## 2. Klonen und installieren
 
 ```bat
 git clone https://github.com/Regdar76/Blitzdiktat.git
 cd Blitzdiktat\BlitzdiktatWin
 ```
 
-Recommended: use a virtual environment:
+Empfohlen: virtuelle Umgebung:
 
 ```bat
 python -m venv .venv
@@ -25,68 +25,52 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Or install directly:
+## 3. Lokale Transkription (empfohlen)
 
-```bat
-pip install -r requirements.txt
-```
-
-## 3. Local Transcription (Recommended)
-
-Local transcription runs fully offline via `faster-whisper`. It is the default mode.
-
-If `faster-whisper` is not yet installed, add it:
+Die lokale Transkription läuft komplett offline über `faster-whisper` und ist der Standard-Modus.
 
 ```bat
 pip install faster-whisper
 ```
 
-On first use, the app downloads the selected Whisper model automatically from Hugging Face and caches it in `%APPDATA%\Blitzdiktat\whisper_models\`. The default model is **Small (~500 MB)**. Download happens once in the background.
+Beim ersten Einsatz lädt die App das gewählte Whisper-Modell automatisch von Hugging Face und speichert es in `%APPDATA%\Blitzdiktat\whisper_models\`. Standard ist **Small (~500 MB)** — der Download passiert einmalig im Hintergrund.
 
-See [local-models.md](local-models.md) for all available models and sizes.
+Alle Modelle und Größen: [local-models.md](local-models.md).
 
-## 4. Configure OpenAI For Online And Rewriting Workflows
+## 4. OpenAI für Online- und Schreib-Workflows
 
-Open the app settings and paste your own OpenAI API key if you want:
+In den App-Einstellungen den eigenen OpenAI API Key eintragen, falls gewünscht:
 
-- online transcription (uses `whisper-1`)
-- text improvement (uses `gpt-4o-mini`)
-- calm-message workflow (uses `gpt-4o`)
-- emoji workflow (uses `gpt-4o-mini`)
-- protocol workflow (uses `gpt-4o-mini` for transcription, `gpt-4o` for the protocol)
+- Online-Transkription (`whisper-1`)
+- Textverbesserung (`gpt-4o-mini`)
+- Dampf ablassen (`gpt-4o`)
+- Emojis (`gpt-4o-mini`)
+- Protokoll (`gpt-4o`)
 
-You are responsible for API access, billing, and data handling in your own OpenAI account.
+API-Zugang, Abrechnung und Datenhandling laufen über das eigene OpenAI-Konto. Den Key niemals ins Repository, in Issues, Logs oder Screenshots packen.
 
-Never commit your API key into this repository, issues, logs, or screenshots.
+Wer nur lokal diktieren will, kann diesen Schritt komplett überspringen.
 
-You can skip this step entirely if you only want to use local transcription without rewriting.
-
-## 5. Run
+## 5. Starten
 
 ```bat
 run.bat
 ```
 
-Or directly:
+Oder direkt: `python main.py`. Beim ersten Start öffnet sich das Hauptfenster automatisch; der Key wandert in den Windows Credential Manager.
 
-```bat
-python main.py
-```
+## 6. Mikrofon-Berechtigung
 
-On first launch the main window opens automatically. Enter your API key there or via Settings — it is stored in the Windows Credential Manager.
+Falls die App nicht auf das Mikrofon zugreifen kann:
 
-## 6. Windows Microphone Permission
+**Einstellungen → Datenschutz und Sicherheit → Mikrofon → Desktop-Apps den Zugriff erlauben**
 
-If the app cannot access the microphone, check Windows microphone privacy settings:
+## Fehlerbehebung
 
-**Settings → Privacy & Security → Microphone → Allow desktop apps to access your microphone**
-
-## Troubleshooting
-
-- **`faster-whisper` not found**: run `pip install faster-whisper` and restart the app.
-- **Model download is slow**: the Small model is ~500 MB and downloads once on first use. Use Tiny (~75 MB) for faster startup.
-- **Online transcription fails immediately**: check whether the API key is present and valid in settings.
-- **Paste does not work**: confirm that the app process is not blocked by clipboard access restrictions. The paste mechanism simulates `Ctrl+V`.
-- **Audio is missing or silent**: check microphone permission in Windows settings and confirm the correct device is selected in app settings.
-- **OpenAI errors**: verify model access and account billing status.
-- **`hotkey_protokoll` setting not saved**: if you have an existing `settings.json` from an older version, add `"hotkey_protokoll": "ctrl+shift+p"` manually or delete the file to reset to defaults.
+- **`faster-whisper` nicht gefunden:** `pip install faster-whisper`, dann App neu starten.
+- **Modell-Download langsam:** Small (~500 MB) lädt einmalig; für schnelleren Start Tiny (~75 MB) wählen.
+- **Online-Transkription schlägt sofort fehl:** Key in den Einstellungen vorhanden und gültig?
+- **Einfügen funktioniert nicht:** Der Mechanismus simuliert `Ctrl+V` — prüfen, ob etwas den Zwischenablage-Zugriff blockiert.
+- **Kein/leises Audio:** Mikrofon-Berechtigung und Geräteauswahl in den App-Einstellungen prüfen.
+- **OpenAI-Fehler:** Modellzugriff und Abrechnungsstatus im OpenAI-Konto prüfen.
+- **`hotkey_protokoll` wird nicht gespeichert:** Bei einer `settings.json` aus einer älteren Version `"hotkey_protokoll": "ctrl+shift+p"` manuell ergänzen oder die Datei löschen (Reset auf Standardwerte).
