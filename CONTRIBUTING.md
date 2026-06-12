@@ -1,52 +1,39 @@
-# Contributing
+# Entwicklung
 
-Thanks for taking a look at Blitzdiktat for Windows.
+Privates Projekt — diese Datei sammelt die Konventionen und Build-Befehle für alle drei Apps.
 
-This repository is intentionally a preview. Contributions should make it easier to learn from, build, fork, or safely extend.
+## Bauen und Testen
 
-## Good First Contributions
-
-- improve setup or install instructions
-- fix confusing UI text
-- improve error messages
-- add tests around prompt construction or quality filters
-- document local model experiments
-- simplify the setup flow
-
-## Before Opening A Pull Request
-
-Please include:
-
-- what changed
-- why it changed
-- how you tested it
-- whether you used AI-assisted coding tools
-
-Keep changes small when possible. Avoid unrelated cleanup in the same PR.
-
-## Local Setup
+**Windows** (Python 3.11+):
 
 ```bat
-python -m venv .venv
-.venv\Scripts\activate
+cd BlitzdiktatWin
+python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
+python -m pytest tests -q
 ```
 
-## Security And Privacy
+**Android** (JDK 17, Android SDK):
 
-- Never commit API keys, tokens, private audio, or confidential transcripts.
-- Avoid adding telemetry, hosted services, or external dependencies without a clear issue first.
-- Call out privacy-impacting changes in the pull request description.
-- Keep the preview honest: do not describe remote OpenAI workflows as offline or local.
+```bat
+cd BlitzdiktatAndroid
+gradlew.bat :app:testDebugUnitTest :app:assembleDebug
+```
 
-## Project Boundaries
+**macOS** (Xcode, XcodeGen):
 
-This preview currently does not include:
+```bash
+./build.sh --debug
+```
 
-- a hosted backend
-- packaged installer releases
-- bundled local model files
-- local text rewriting (rewriting still requires OpenAI)
+Die CI (`.github/workflows/ci.yml`) führt bei jedem Push auf `main` alle drei Jobs aus: `check-windows` (ruff, compileall, pytest), `check-android` (JUnit + Debug-APK), `build-macos` (inkl. Secret-Scan).
 
-Those can be discussed in issues, but please keep PRs focused on the current Windows preview unless a maintainer agrees on a larger direction first.
+## Konventionen
+
+- Kleine, fokussierte Commits mit aussagekräftiger Message; CI muss grün bleiben.
+- Die drei Apps spiegeln sich gegenseitig: gleiche Workflows, gleiche Prompts, gleiche Begriffe. Wer ein Feature auf einer Plattform ändert, prüft, ob die anderen nachziehen sollten (siehe [ROADMAP.md](ROADMAP.md)).
+- Neue rein-logische Bausteine testbar halten (auf Android: Context-frei, damit JVM-Tests laufen).
+- Keine Telemetrie, keine zusätzlichen Dienste, kein eingebetteter API-Key.
+- Niemals Secrets committen: keine API-Keys, Tokens, Keystores (`key.properties`, `*.jks`), privaten Aufnahmen oder Transkripte. Die CI prüft Muster aus `.github/secret-scan-patterns.txt`.
+- Ehrlich dokumentieren: OpenAI-Workflows nicht als „offline" oder „lokal" beschreiben.

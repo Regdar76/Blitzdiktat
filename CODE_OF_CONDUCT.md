@@ -1,9 +1,3 @@
-# Code Of Conduct
+# Umgangston
 
-Be kind, direct, and constructive.
-
-This is a small experimental project. Good discussion is welcome; personal attacks, harassment, or hostile behavior are not.
-
-If a conversation gets heated, slow down and move back to the concrete technical question.
-
-Maintainers may close, hide, or moderate issues, comments, and pull requests that make collaboration harder or unsafe.
+Privates Projekt. Sollten künftig weitere Personen mitarbeiten, gilt: freundlich, direkt und konstruktiv bleiben — bei hitzigen Diskussionen zurück zur konkreten technischen Frage.

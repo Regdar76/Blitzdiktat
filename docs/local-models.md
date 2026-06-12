@@ -1,46 +1,46 @@
-# Local Models
+# Lokale Modelle
 
-Blitzdiktat can run transcription locally via `faster-whisper` (CTranslate2 backend). No API key is needed for transcription in local mode. Models are downloaded automatically from Hugging Face on first use and cached locally.
+Die Transkription läuft lokal — ohne API-Key, Audio verlässt das Gerät nicht:
 
-## Available Models
+- **Windows:** `faster-whisper` (CTranslate2-Backend)
+- **macOS:** WhisperKit
+- **Android:** On-Device-Spracherkennung des Systems (kein Whisper; whisper.cpp ist auf der [Roadmap](../ROADMAP.md))
 
-| Model | Size | Notes |
+## Verfügbare Whisper-Modelle (Windows)
+
+| Modell | Größe | Hinweis |
 |---|---|---|
-| tiny | ~75 MB | Very fast, less accurate |
-| base | ~150 MB | Fast |
-| small | ~500 MB | Good balance — **recommended default** |
-| medium | ~1.5 GB | More accurate |
-| large-v3 | ~3 GB | Best quality |
+| tiny | ~75 MB | Sehr schnell, weniger genau |
+| base | ~150 MB | Schnell |
+| small | ~500 MB | Guter Kompromiss — **empfohlener Standard** |
+| medium | ~1,5 GB | Genauer |
+| large-v3 | ~3 GB | Beste Qualität |
 
-All models are multilingual and support German, English, and many other languages.
+Alle Modelle sind mehrsprachig (Deutsch, Englisch und viele weitere Sprachen).
 
-## Model Cache Location
+## Modell-Cache
 
 ```
 %APPDATA%\Blitzdiktat\whisper_models\
 ```
 
-The app creates this folder automatically. Models are downloaded on first use — they do not ship with the app.
+Der Ordner wird automatisch angelegt. Modelle werden beim ersten Einsatz von Hugging Face geladen — sie liegen der App nicht bei.
 
-## Selecting A Model
+## Modell wählen
 
-Open the app settings, go to **Einstellungen → Transkription**, and choose a model from the dropdown. The selected model is downloaded on first use. Subsequent runs load the cached model directly.
+**Einstellungen → Transkription** → Modell im Dropdown wählen. Das gewählte Modell lädt beim ersten Einsatz; danach kommt es direkt aus dem Cache. Für die meisten Fälle ist **small** die richtige Wahl; **tiny**/**base** bei knappem Speicher oder langsamer Verbindung.
 
-The **small** model is recommended for most use cases. Use **tiny** or **base** if download speed or memory usage is a concern.
-
-## Install faster-whisper
-
-If `faster-whisper` is not yet installed:
+## faster-whisper installieren
 
 ```bat
 pip install faster-whisper
 ```
 
-Then restart the app. If the package is missing, the app shows a warning and falls back to prompting for an OpenAI API key.
+Danach die App neu starten. Fehlt das Paket, zeigt die App eine Warnung und bietet ersatzweise die Online-Transkription mit OpenAI-Key an.
 
-## Notes
+## Hinweise
 
-- First use after selecting a new model can be slower because the model downloads and loads for the first time.
-- Models run on CPU with `int8` quantization by default. This works on all Windows machines without a GPU.
-- Local transcription avoids sending audio to any external service for the Blitzdiktat, Blitzdiktat+, Blitzdiktat $%&!, Blitzdiktat :), and Blitzdiktat Protokoll workflows — but the rewriting step in those workflows still uses OpenAI.
-- The app does not currently verify model checksums after download. Only use the app on machines you trust.
+- Der erste Lauf nach einem Modellwechsel ist langsamer (Download + erstes Laden).
+- Modelle laufen standardmäßig auf der CPU mit `int8`-Quantisierung — funktioniert ohne GPU.
+- Lokale Transkription vermeidet das Senden von Audio an externe Dienste; der Schreib-Schritt der LLM-Workflows nutzt weiterhin OpenAI.
+- Prüfsummen der Modelle werden nach dem Download derzeit nicht verifiziert ([Roadmap](../ROADMAP.md)).

@@ -1,35 +1,43 @@
-# Privacy Notes
+# Datenschutz-Notizen
 
-Blitzdiktat for Windows does not include a hosted backend.
+Blitzdiktat hat auf keiner Plattform ein eigenes Backend. Bei Online-Workflows sendet das Gerät Daten direkt an OpenAI:
 
-When you use online workflows, your PC sends data directly to OpenAI:
+- Audio bei der Online-Transkription (nur Windows, optional)
+- transkribierten oder eingegebenen Text bei den Schreib-Workflows
+- hinterlegte Begriffe (Vokabular) und Prompt-Kontext, falls konfiguriert
+- Ergebnis-Texte für das automatische Vokabular-Lernen (Begriffs-Extraktion); beim rein lokalen Diktat wird das übersprungen — dort verlässt nichts das Gerät
 
-- audio recordings for online transcription
-- transcribed or typed text for rewriting workflows
-- custom terms and prompt context if you configured them
+Nur die **Transkription** kann lokal laufen (Windows: `faster-whisper`, Android: Geräte-Spracherkennung, macOS: WhisperKit). Jeder Workflow, der Text umschreibt oder verbessert, braucht OpenAI und kann nicht vollständig offline laufen.
 
-When the transcription backend is set to **local**, transcription runs on your PC via `faster-whisper` and does not send audio to OpenAI. Rewriting workflows (Blitzdiktat+, Blitzdiktat $%&!, Blitzdiktat :), Blitzdiktat Protokoll) still require OpenAI and cannot run fully offline.
+API-Nutzung, Kosten und Datenhandling laufen über das eigene OpenAI-Konto.
 
-You are responsible for your OpenAI account, API usage, costs, and data handling.
+## Lokale Daten
 
-## Local Data
+**Windows**
 
-The app stores:
+- OpenAI-Key im Windows Credential Manager
+- Einstellungen in `%APPDATA%\Blitzdiktat\settings.json` (Klartext-JSON — keine Geheimnisse in Prompts/Kontext-Felder schreiben)
+- Whisper-Modelle in `%APPDATA%\Blitzdiktat\whisper_models\`
+- temporäre Audiodateien in `%TEMP%` während der Verarbeitung (werden am Workflow-Ende gelöscht)
+- Transkripte (`.txt`) und Protokoll-PDFs in `%LOCALAPPDATA%\Blitzdiktat\Transkriptionen\`, automatische Bereinigung nach 14 Tagen
+- Gelerntes Vokabular in `%APPDATA%\Blitzdiktat\vocabulary.json`
 
-- your OpenAI API key in the Windows Credential Manager
-- workflow settings in `%APPDATA%\Blitzdiktat\settings.json`
-- faster-whisper model files in `%APPDATA%\Blitzdiktat\whisper_models\`
-- temporary audio files in `%TEMP%` while a transcription is being processed; the app attempts to delete each recording when the workflow ends or is cancelled
-- transcript files (`.txt`) and protocol PDFs (`.pdf`) in `%LOCALAPPDATA%\Blitzdiktat\Transkriptionen\`; files older than 14 days are cleaned up automatically
+**Android**
 
-Workflow output is placed on the Windows clipboard so it can be pasted into another app. The clipboard content is visible to other processes while it is present on the clipboard. Clipboard managers or other apps may observe or retain this content.
+- OpenAI-Key und Einstellungen in `EncryptedSharedPreferences` (AES-256, Schlüssel im Android Keystore)
+- Transkripte/PDFs im app-internen Speicher (`files/Transkriptionen/`), Bereinigung nach 14 Tagen
+- Gelerntes Vokabular in `files/vocabulary.txt`
+- Die Diktat-Tastatur schreibt Ergebnisse direkt ins Eingabefeld der Ziel-App — ab dort gelten deren Regeln
 
-Settings such as custom prompts, custom terms, and context are stored in `settings.json` as plain JSON. Do not put secrets into those fields.
+**macOS**
 
-## Offline Scope
+- OpenAI-Key in der Keychain
+- WhisperKit-Modelle und App-Daten im Application-Support-Verzeichnis, mit Aufräum-Service
 
-Only transcription can run locally. Any workflow that rewrites, improves, or transforms text still sends data to OpenAI.
+## Zwischenablage (Windows)
 
-## Sensitive Content
+Workflow-Ergebnisse laufen über die Zwischenablage (simuliertes `Ctrl+V`). Solange der Inhalt dort liegt, können andere Prozesse und Clipboard-Manager ihn sehen oder aufbewahren.
 
-Do not use this preview with confidential, regulated, or highly sensitive content unless you have reviewed the code, your OpenAI settings, and your legal and privacy requirements.
+## Sensible Inhalte
+
+Vertrauliche oder regulierte Inhalte nur diktieren, wenn Code, OpenAI-Einstellungen und die eigenen rechtlichen Anforderungen geprüft sind — die Apps sind Experimente, keine auditierte Software.

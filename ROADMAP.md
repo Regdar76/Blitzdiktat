@@ -1,32 +1,47 @@
 # Roadmap
 
-This is a preview roadmap, not a promise.
+Arbeitsliste für die Weiterentwicklung — keine Zusagen, nur Richtung.
 
-## Current Scope
+## Aktueller Stand
 
-- Windows system tray app
-- local recording and hotkeys
-- offline transcription via `faster-whisper` (default)
-- direct OpenAI API calls with a user-provided API key for online transcription
-- transcription, rewriting, calm-message, emoji, and protocol workflows
-- automatic saving of transcripts as `.txt` and protocols as `.pdf`
-- no hosted backend
+| | Windows 2.1.3 | Android 0.3.0 | macOS (Blitztext) |
+|---|---|---|---|
+| Diktat lokal | ✅ faster-whisper | ✅ Geräte-Erkennung | ✅ WhisperKit |
+| LLM-Workflows (+, $%&!, :)) | ✅ | ✅ | ✅ |
+| Protokoll (+ PDF) | ✅ | ✅ | — |
+| Verlauf (14 Tage) | ✅ | ✅ | teilweise |
+| Vokabular (manuell + gelernt) | ✅ | ✅ | — |
+| Eigene Prompts/Namen je Workflow | ✅ | ✅ | — |
+| Tests + CI | ✅ pytest | ✅ JUnit | Build-Job |
 
-## Next Useful Work
+## Windows
 
-- Make first-run setup clearer, especially model download feedback.
-- Improve credential setup, validation, and recovery UX.
-- Add a small automated test layer around prompt construction and text quality filters.
-- Add provider boundaries so OpenAI and local transcription can be swapped more cleanly.
-- Add local text rewriting so the rewriting workflows can run fully offline.
-- Improve the Protokoll workflow: speaker detection, language auto-detection, custom templates.
-- Add a packaged Windows installer for non-developer users.
-- Add stronger supply-chain checks around downloaded local speech models.
+- Erster Start klarer machen, v. a. Feedback beim Modell-Download
+- Credential-Setup, -Validierung und -Wiederherstellung verbessern
+- Provider-Grenzen schärfen, damit OpenAI und lokale Transkription sauber austauschbar sind
+- Lokales Text-Rewriting, damit auch die Schreib-Workflows offline laufen können
+- Protokoll: Sprechererkennung, automatische Spracherkennung, eigene Vorlagen
+- Prüfsummen-Verifikation für heruntergeladene Whisper-Modelle
+- Installer-Pflege (Inno Setup liegt bei, Releases nach Bedarf)
 
-## Not In Scope Yet
+## Android
 
-- Production support.
-- Accounts, sync, teams, or hosted infrastructure.
-- Claims that all workflows are offline or privacy-complete (rewriting still uses OpenAI).
-- Other platforms.
-- Bundled local models.
+- **whisper.cpp per JNI** für echte Whisper-Qualität offline — löst auch:
+  - Vokabular beim reinen Diktat (Begriffsliste als Whisper-Prompt)
+  - Audio-Datei-Import für das Protokoll (bisher nur Textdateien)
+  - lückenlose Protokoll-Aufnahme (SpeechRecognizer verliert beim Segment-Neustart kurze Stücke)
+- Strings nach `strings.xml`, sauberes Dark-Theme statt hartkodierter Farben
+- `security-crypto` (abgekündigt) durch eigene Keystore-Lösung ersetzen
+- Release-Builds mit Minify/ProGuard, sobald auf Geräten getestet
+
+## macOS
+
+- Protokoll-Workflow nachziehen (inkl. PDF-Export)
+- Verlauf und Vokabular auf den Stand von Windows/Android bringen
+- Eigene Prompts/Namen je Workflow
+
+## Bewusst nicht geplant
+
+- Gehostetes Backend, Accounts, Sync oder Teams
+- Eingebetteter API-Key in verteilten Apps
+- Veröffentlichung des Repositories (bleibt privat)

@@ -1,8 +1,9 @@
 # Blitzdiktat für Android
 
-Android-Begleiter der Windows-App: Diktieren per On-Device-Spracherkennung
-(offline, ohne API-Key) plus die bekannten LLM-Workflows mit eigenem
-OpenAI-Key (BYO-Key, sicher verschlüsselt im Android Keystore).
+Android-Version von [Blitzdiktat](../README.md): Diktieren per
+On-Device-Spracherkennung (offline, ohne API-Key) plus die bekannten
+LLM-Workflows mit eigenem OpenAI-Key (BYO-Key, sicher verschlüsselt im
+Android Keystore).
 
 **Bewusst KEIN eingebetteter API-Key:** Keys in verteilten Apps sind in
 Minuten extrahierbar und führen zu Missbrauch auf fremde Rechnung.
