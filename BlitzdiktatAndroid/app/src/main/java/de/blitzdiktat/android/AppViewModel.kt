@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.blitzdiktat.android.data.AppSettings
 import de.blitzdiktat.android.data.TranscriptStore
+import de.blitzdiktat.android.data.VocabularyStore
 import de.blitzdiktat.android.llm.LlmException
 import de.blitzdiktat.android.llm.OpenAiClient
 import de.blitzdiktat.android.pdf.ProtocolPdf
@@ -152,6 +153,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _state.value = _state.value.copy(
                     phase = Phase.DONE, statusText = "Fertig.", resultText = result, pdfFile = pdf,
                 )
+                learnVocabularyInBackground(result)
             } catch (e: LlmException) {
                 _state.value = _state.value.copy(
                     phase = Phase.ERROR,
@@ -162,6 +164,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     phase = Phase.ERROR,
                     errorText = "Unerwarteter Fehler: ${e.message}",
                 )
+            }
+        }
+    }
+
+    /**
+     * Extrahiert im Hintergrund Eigennamen/Fachbegriffe aus dem Ergebnis und
+     * erweitert das gelernte Vokabular — wie die Windows-App. Läuft nur nach
+     * LLM-Workflows (das reine Blitzdiktat ist auf Android immer lokal, dort
+     * verlässt wie auf Windows im Lokalmodus nichts das Gerät).
+     */
+    private fun learnVocabularyInBackground(text: String) {
+        val ctx = getApplication<Application>()
+        if (!AppSettings.isConfigured(ctx)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val terms = OpenAiClient.extractTerms(ctx, text)
+                if (terms.isNotEmpty()) {
+                    VocabularyStore.addTerms(VocabularyStore.file(ctx), terms)
+                }
             }
         }
     }

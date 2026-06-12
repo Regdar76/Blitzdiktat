@@ -27,6 +27,7 @@ object AppSettings {
     private const val KEY_DICTATION_LANGUAGE = "dictation_language"
     private const val KEY_PREFIX_CUSTOM_NAME = "custom_name_"
     private const val KEY_PREFIX_CUSTOM_PROMPT = "custom_prompt_"
+    private const val KEY_CUSTOM_TERMS = "custom_terms"
 
     @Volatile
     private var prefs: SharedPreferences? = null
@@ -98,6 +99,22 @@ object AppSettings {
 
     fun setDictationLanguage(context: Context, language: String) =
         prefs(context).edit().putString(KEY_DICTATION_LANGUAGE, language.trim()).apply()
+
+    /**
+     * Manuell gepflegte Eigennamen/Fachbegriffe — das Pendant zu
+     * custom_terms der Windows-App. Zeilenweise gespeichert.
+     */
+    fun customTerms(context: Context): List<String> =
+        prefs(context).getString(KEY_CUSTOM_TERMS, "")
+            ?.split('\n')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+
+    fun setCustomTerms(context: Context, terms: List<String>) =
+        prefs(context).edit()
+            .putString(KEY_CUSTOM_TERMS, terms.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n"))
+            .apply()
 
     // ── Workflow-Anpassung (eigene Namen und System-Prompts, wie Windows) ──
 

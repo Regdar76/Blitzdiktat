@@ -3,6 +3,7 @@ package de.blitzdiktat.android.llm
 
 import android.content.Context
 import de.blitzdiktat.android.data.AppSettings
+import de.blitzdiktat.android.data.VocabularyStore
 import de.blitzdiktat.android.workflows.WorkflowType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,7 +33,10 @@ object OpenAiClient {
         return when (type) {
             WorkflowType.TRANSCRIPTION -> text
             WorkflowType.TEXT_IMPROVER -> complete(
-                context, systemPrompt(context, type) { Prompts.improvement(AppSettings.tone(context)) }, text,
+                context,
+                systemPrompt(context, type) { Prompts.improvement(AppSettings.tone(context)) } +
+                    Prompts.vocabularyHint(allTerms(context)),
+                text,
                 AppSettings.modelFast(context), 0.3,
             )
             WorkflowType.DAMPF_ABLASSEN -> complete(
@@ -48,13 +52,43 @@ object OpenAiClient {
                 // relative Zeitangaben in konkrete Termine umrechnen kann.
                 val fmt = java.text.SimpleDateFormat("EEEE, dd.MM.yyyy", java.util.Locale.GERMAN)
                 val dated = "Aufnahmedatum: ${fmt.format(java.util.Date())}\n\n$text"
+                // Windows gibt das Vokabular der Whisper-Transkription mit; die
+                // Geräte-Erkennung von Android kann das nicht — daher hier im Prompt.
                 complete(
-                    context, systemPrompt(context, type) { Prompts.PROTOKOLL }, dated,
+                    context,
+                    systemPrompt(context, type) { Prompts.PROTOKOLL } +
+                        Prompts.vocabularyHint(allTerms(context)),
+                    dated,
                     AppSettings.modelQuality(context), 0.2,
                 )
             }
         }
     }
+
+    /**
+     * Extrahiert Eigennamen/Fachbegriffe aus einem Ergebnis (Hintergrund-Lernen) —
+     * Pendant zu llm_service.extract_terms() der Windows-App.
+     */
+    suspend fun extractTerms(context: Context, text: String): List<String> = try {
+        val raw = complete(context, EXTRACT_TERMS_PROMPT, text, AppSettings.modelFast(context), 0.0)
+        val arr = JSONArray(raw)
+        (0 until arr.length()).mapNotNull { i ->
+            (arr.opt(i) as? String)?.trim()?.ifEmpty { null }
+        }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    private const val EXTRACT_TERMS_PROMPT =
+        "Extrahiere alle Eigennamen, Firmennamen, Produktnamen, Ortsnamen und Fachbegriffe " +
+            "aus dem folgenden Text. Gib NUR eine JSON-Liste von Strings zurück, z. B. " +
+            "[\"OpenAI\", \"München\", \"Bauprojekt Nord\"]. " +
+            "Keine Erklärungen. Wenn keine relevanten Begriffe vorhanden sind, gib [] zurück."
+
+    /** Manuelle + gelernte Begriffe, dedupliziert (manuelle zuerst, wie Windows). */
+    private fun allTerms(context: Context): List<String> =
+        (AppSettings.customTerms(context) + VocabularyStore.learnedTerms(VocabularyStore.file(context)))
+            .distinctBy { it.lowercase() }
 
     /** Eigener System-Prompt aus den Einstellungen, sonst der eingebaute (wie Windows). */
     private inline fun systemPrompt(
