@@ -19,6 +19,7 @@ import android.widget.TextView
 import de.blitzdiktat.android.MainActivity
 import de.blitzdiktat.android.data.AppSettings
 import de.blitzdiktat.android.data.TranscriptStore
+import de.blitzdiktat.android.data.VocabularyStore
 import de.blitzdiktat.android.llm.LlmException
 import de.blitzdiktat.android.llm.OpenAiClient
 import de.blitzdiktat.android.pdf.ProtocolPdf
@@ -224,6 +225,7 @@ class BlitzdiktatImeService : InputMethodService() {
                 commit(result)
                 status("Fertig.")
                 persist(workflow, result)
+                learnVocabulary(result)
             } catch (e: LlmException) {
                 status(e.message ?: "Fehler.")
             } catch (e: Exception) {
@@ -240,6 +242,18 @@ class BlitzdiktatImeService : InputMethodService() {
                 val txt = TranscriptStore.saveTranscript(dir, text, type.displayName)
                 if (type == WorkflowType.PROTOKOLL) {
                     ProtocolPdf.write(text, File(dir, txt.nameWithoutExtension + ".pdf"))
+                }
+            }
+        }
+    }
+
+    /** Vokabular im Hintergrund erweitern — wie in der Haupt-App. */
+    private fun learnVocabulary(text: String) {
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val terms = OpenAiClient.extractTerms(this@BlitzdiktatImeService, text)
+                if (terms.isNotEmpty()) {
+                    VocabularyStore.addTerms(VocabularyStore.file(this@BlitzdiktatImeService), terms)
                 }
             }
         }

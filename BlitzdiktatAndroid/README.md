@@ -31,6 +31,15 @@ Workflows: Blitzdiktat (lokal, ohne Key), Blitzdiktat+, $%&!, :) und Protokoll
 - **Einstellungen**: Diktiersprache (Standard `de-DE`), Ton, Emoji-Dichte,
   OpenAI-Modell-Overrides sowie eigene Namen und System-Prompts je Workflow —
   wie in der Windows-App.
+- **Vokabular**: Eigennamen und Fachbegriffe, die die Spracherkennung oft
+  falsch schreibt, lassen sich in den Einstellungen korrekt hinterlegen.
+  Zusätzlich lernt die App wie auf Windows automatisch dazu: Nach jedem
+  Workflow mit OpenAI-Key werden Eigennamen im Hintergrund extrahiert
+  (max. 150, die ältesten fliegen zuerst raus). Beides fließt in die
+  Prompts von Blitzdiktat+ und Protokoll ein. Grenze gegenüber Windows:
+  Beim reinen Blitzdiktat kann das Vokabular nicht berücksichtigt werden,
+  weil Androids Geräte-Spracherkennung keine Begriffsliste annimmt
+  (Whisper on-device würde das lösen, s. Roadmap).
 
 ## Technik
 

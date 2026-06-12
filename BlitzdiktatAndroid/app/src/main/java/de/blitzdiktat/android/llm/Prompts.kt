@@ -4,6 +4,18 @@ package de.blitzdiktat.android.llm
 /** Deutsche System-Prompts — portiert aus der Windows-App (llm_service.py, protokoll_workflow.py). */
 object Prompts {
 
+    /**
+     * Vokabular-Zusatz für System-Prompts — gleiche Formulierung wie
+     * _build_improvement_prompt() der Windows-App. Leer, wenn keine Begriffe da sind.
+     */
+    fun vocabularyHint(terms: List<String>): String =
+        if (terms.isEmpty()) {
+            ""
+        } else {
+            "\n\nWichtig: Diese Eigennamen und Fachbegriffe müssen exakt so " +
+                "geschrieben werden: " + terms.joinToString(", ")
+        }
+
     fun improvement(tone: String): String {
         val toneText = when (tone) {
             "formal" -> "Verwende einen formellen, professionellen Ton"

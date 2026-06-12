@@ -6,6 +6,8 @@ import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +24,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -30,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -38,6 +42,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.blitzdiktat.android.data.AppSettings
+import de.blitzdiktat.android.data.VocabularyStore
 import de.blitzdiktat.android.workflows.WorkflowType
 
 /** Sprachen der Geräte-Spracherkennung (BCP-47-Tag → Anzeigename). */
@@ -74,6 +79,8 @@ fun SettingsScreen() {
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
         ModelSection(context)
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        VocabularySection(context)
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
         Text("Workflows anpassen", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Text(
@@ -91,6 +98,107 @@ fun SettingsScreen() {
             WorkflowCustomCard(context, type)
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun VocabularySection(context: Context) {
+    var input by remember { mutableStateOf("") }
+    var customTerms by remember { mutableStateOf(AppSettings.customTerms(context)) }
+    var learnedTerms by remember {
+        mutableStateOf(VocabularyStore.learnedTerms(VocabularyStore.file(context)))
+    }
+
+    fun addCustomTerm() {
+        val term = input.trim()
+        if (term.isEmpty()) return
+        customTerms = (customTerms + term).distinctBy { it.lowercase() }
+        AppSettings.setCustomTerms(context, customTerms)
+        input = ""
+    }
+
+    Text("Vokabular", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+    Text(
+        "Namen und Fachbegriffe, die oft falsch erkannt werden — hier in korrekter " +
+            "Schreibweise eintragen. Sie fließen in ${AppSettings.displayName(context, WorkflowType.TEXT_IMPROVER)} " +
+            "und ${AppSettings.displayName(context, WorkflowType.PROTOKOLL)} ein. " +
+            "Antippen entfernt einen Begriff.",
+        fontSize = 12.sp,
+        color = Color.Gray,
+    )
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedTextField(
+            value = input,
+            onValueChange = { input = it },
+            label = { Text("Begriff hinzufügen") },
+            placeholder = { Text("z. B. Karstens, Blitzdiktat") },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+        )
+        Button(onClick = { addCustomTerm() }, enabled = input.isNotBlank()) {
+            Text("+")
+        }
+    }
+
+    if (customTerms.isNotEmpty()) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            customTerms.forEach { term ->
+                InputChip(
+                    selected = false,
+                    onClick = {
+                        customTerms = customTerms.filterNot { it == term }
+                        AppSettings.setCustomTerms(context, customTerms)
+                    },
+                    label = { Text("$term ✕") },
+                )
+            }
+        }
+    }
+
+    if (learnedTerms.isNotEmpty()) {
+        Text(
+            "Automatisch gelernt (${learnedTerms.size})",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            "Aus früheren Ergebnissen extrahiert (max. ${VocabularyStore.MAX_TERMS} Begriffe).",
+            fontSize = 12.sp,
+            color = Color.Gray,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            learnedTerms.forEach { term ->
+                InputChip(
+                    selected = false,
+                    onClick = {
+                        VocabularyStore.removeTerm(VocabularyStore.file(context), term)
+                        learnedTerms = VocabularyStore.learnedTerms(VocabularyStore.file(context))
+                    },
+                    label = { Text("$term ✕") },
+                )
+            }
+        }
+        OutlinedButton(onClick = {
+            VocabularyStore.clear(VocabularyStore.file(context))
+            learnedTerms = emptyList()
+            Toast.makeText(context, "Gelerntes Vokabular geleert.", Toast.LENGTH_SHORT).show()
+        }) { Text("Gelerntes Vokabular leeren") }
+    } else {
+        Text(
+            "Noch nichts automatisch gelernt. Nach jedem Workflow mit OpenAI-Key werden " +
+                "Eigennamen im Hintergrund extrahiert und hier ergänzt.",
+            fontSize = 12.sp,
+            color = Color.Gray,
+        )
     }
 }
 

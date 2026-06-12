@@ -46,4 +46,18 @@ class PromptsTest {
         assertTrue(Prompts.PROTOKOLL.contains("Erfinde keine Inhalte"))
         assertTrue(Prompts.PROTOKOLL.contains("## Protokoll"))
     }
+
+    @Test
+    fun vocabularyHintIsEmptyWithoutTerms() {
+        assertTrue(Prompts.vocabularyHint(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun vocabularyHintListsTermsWithWindowsWording() {
+        val hint = Prompts.vocabularyHint(listOf("Karstens", "Bauprojekt Nord"))
+        // Gleiche Formulierung wie llm_service._build_improvement_prompt (Windows)
+        assertTrue(hint.contains("müssen exakt so geschrieben werden"))
+        assertTrue(hint.contains("Karstens, Bauprojekt Nord"))
+        assertTrue("Zusatz muss als eigener Absatz anschließen", hint.startsWith("\n\n"))
+    }
 }
