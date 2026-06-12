@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum

@@ -1,37 +1,13 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 """
 Blitzdiktat for Windows — entry point.
 Run with:  python main.py
 Or via:    run.bat
 """
 
-import sys
-import os
-
-# ── Ensure all required packages are on sys.path ────────────────────────────
-# Priority 1: local "packages/" folder next to this script — always works,
-# independent of user profiles, roaming AppData, or network drives.
-_here = os.path.dirname(os.path.abspath(__file__))
-_local_pkgs = os.path.join(_here, "packages")
-if os.path.isdir(_local_pkgs) and _local_pkgs not in sys.path:
-    sys.path.insert(0, _local_pkgs)
-
-# Priority 2: user-level site-packages (may be inaccessible in some environments)
-try:
-    import site as _site
-    _u = _site.getusersitepackages()
-    if _u and os.path.isdir(_u) and _u not in sys.path:
-        sys.path.insert(0, _u)
-except Exception:
-    pass
-_appdata = os.environ.get("APPDATA", "")
-if _appdata:
-    _ver = f"Python{sys.version_info.major}{sys.version_info.minor}"
-    _roaming = os.path.join(_appdata, "Python", _ver, "site-packages")
-    if os.path.isdir(_roaming) and _roaming not in sys.path:
-        sys.path.insert(0, _roaming)
-
 import threading
 
+import customtkinter as ctk
 from app_state import AppState
 from features.tray.tray_app import TrayApp
 from features.ui.main_window import MainWindow
@@ -50,6 +26,7 @@ def main() -> None:
     threading.Thread(target=preload_default_model, daemon=True).start()
 
     app_state = AppState()
+    ctk.set_appearance_mode(app_state.settings.appearance_mode)
 
     main_window = MainWindow(app_state)
 

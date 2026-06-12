@@ -13,8 +13,8 @@ This guide is for people who want to run and inspect the preview themselves.
 ## 2. Clone And Install
 
 ```bat
-
-cd blitztext-app\BlitzdiktatWin
+git clone https://github.com/Regdar76/Blitzdiktat.git
+cd Blitzdiktat\BlitzdiktatWin
 ```
 
 Recommended: use a virtual environment:

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Thorben Meier. MIT License.
 import SwiftUI
 
 struct WorkflowRowView: View {

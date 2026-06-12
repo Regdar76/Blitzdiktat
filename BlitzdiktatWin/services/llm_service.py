@@ -1,27 +1,81 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
+import datetime
+import json as _json
+from typing import TYPE_CHECKING
+
 from openai import AsyncOpenAI
 from .credentials_service import load_api_key
+
+if TYPE_CHECKING:
+    from app_state import TextImprovementSettings
 
 
 class LLMError(Exception):
     pass
 
 
+# ── Modellauswahl ───────────────────────────────────────────────────────────
+# Standardwerte — überschreibbar in settings.json über die Felder
+# "openai_model_fast" und "openai_model_quality" (leer = Standard).
+DEFAULT_MODEL_FAST = "gpt-4o-mini"      # Textverbesserung, Emojis, Vokabular
+DEFAULT_MODEL_QUALITY = "gpt-4o"        # Dampf ablassen, Protokoll
+
+_model_fast = DEFAULT_MODEL_FAST
+_model_quality = DEFAULT_MODEL_QUALITY
+
+
+def set_models(fast: str = "", quality: str = "") -> None:
+    """Setzt die verwendeten Chat-Modelle. Leere Strings = Standardmodell."""
+    global _model_fast, _model_quality
+    _model_fast = (fast or "").strip() or DEFAULT_MODEL_FAST
+    _model_quality = (quality or "").strip() or DEFAULT_MODEL_QUALITY
+
+
+_EXTRACT_TERMS_PROMPT = (
+    "Extrahiere alle Eigennamen, Firmennamen, Produktnamen, Ortsnamen und Fachbegriffe "
+    "aus dem folgenden Text. Gib NUR eine JSON-Liste von Strings zurück, z. B. "
+    '[\"OpenAI\", \"München\", \"Bauprojekt Nord\"]. '
+    "Keine Erklärungen. Wenn keine relevanten Begriffe vorhanden sind, gib [] zurück."
+)
+
+
+async def extract_terms(text: str) -> list[str]:
+    """Extrahiert Eigennamen und Fachbegriffe aus einem Transkript (im Hintergrund)."""
+    try:
+        raw = await _complete(text, _EXTRACT_TERMS_PROMPT, model=_model_fast, temperature=0.0)
+        terms = _json.loads(raw)
+        return [str(t).strip() for t in terms if isinstance(t, str) and t.strip()]
+    except Exception:
+        return []
+
+
 async def improve(text: str, settings: "TextImprovementSettings") -> str:
     prompt = _build_improvement_prompt(settings)
-    return await _complete(text, prompt, model="gpt-4o-mini", temperature=0.3)
+    return await _complete(text, prompt, model=_model_fast, temperature=0.3)
 
 
 async def dampf_ablassen(text: str, system_prompt: str) -> str:
-    return await _complete(text, system_prompt, model="gpt-4o", temperature=0.4)
+    return await _complete(text, system_prompt, model=_model_quality, temperature=0.4)
+
+
+_WEEKDAYS_DE = [
+    "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag",
+]
 
 
 async def protokoll(text: str, system_prompt: str) -> str:
-    return await _complete(text, system_prompt, model="gpt-4o", temperature=0.2)
+    # Aufnahmedatum mitgeben, damit das Modell das Datumsfeld füllen und
+    # relative Zeitangaben ("nächsten Freitag") in konkrete Termine umrechnen kann.
+    now = datetime.datetime.now()
+    dated = (
+        f"Aufnahmedatum: {_WEEKDAYS_DE[now.weekday()]}, {now.strftime('%d.%m.%Y')}\n\n{text}"
+    )
+    return await _complete(dated, system_prompt, model=_model_quality, temperature=0.2)
 
 
 async def add_emojis(text: str, density: str = "mittel") -> str:
     prompt = _build_emoji_prompt(density)
-    return await _complete(text, prompt, model="gpt-4o-mini", temperature=0.3)
+    return await _complete(text, prompt, model=_model_fast, temperature=0.3)
 
 
 async def _complete(text: str, system_prompt: str, model: str, temperature: float) -> str:
@@ -29,7 +83,7 @@ async def _complete(text: str, system_prompt: str, model: str, temperature: floa
     if not api_key:
         raise LLMError("OpenAI API Key fehlt. Bitte in den Einstellungen hinterlegen.")
 
-    client = AsyncOpenAI(api_key=api_key)
+    client = AsyncOpenAI(api_key=api_key, timeout=60.0, max_retries=2)
     response = await client.chat.completions.create(
         model=model,
         messages=[

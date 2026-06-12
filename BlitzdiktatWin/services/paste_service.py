@@ -1,4 +1,5 @@
-"""
+# Copyright (c) 2026 Thorben Meier. MIT License.
+r"""
 Clipboard + keyboard simulation for auto-paste on Windows.
 
 Strategy (in order):
@@ -7,7 +8,7 @@ Strategy (in order):
   3a. If it is a standard Win32 edit control  →  WM_PASTE directly (no focus steal)
   3b. Otherwise  →  AttachThreadInput + SetForegroundWindow + SendInput(Ctrl+V)
 
-Debug mode: set env var BLITZTEXT_DEBUG=1 before launching.
+Debug mode: set env var BLITZDIKTAT_DEBUG=1 before launching.
 Log is written to %APPDATA%\Blitzdiktat\debug.log
 """
 
@@ -55,9 +56,9 @@ _PASTE_MSG_CLASSES = frozenset({
 })
 
 # ── Debug logging ──────────────────────────────────────────────────────────
-# Always-on: logs every paste attempt to %APPDATA%\Blitzdiktat\debug.log
-# Set BLITZTEXT_DEBUG=0 to disable.
-_DEBUG = os.environ.get("BLITZTEXT_DEBUG", "1").strip() != "0"
+# Opt-in: set BLITZDIKTAT_DEBUG=1 to log paste attempts to
+# %APPDATA%\Blitzdiktat\debug.log. Diktat-Inhalte werden nie geloggt.
+_DEBUG = os.environ.get("BLITZDIKTAT_DEBUG", "").strip() == "1"
 _log_lock = threading.Lock()
 
 
@@ -141,8 +142,7 @@ def get_foreground_hwnd() -> int:
 # ── Public API ─────────────────────────────────────────────────────────────
 
 def paste_to_window(hwnd: int, text: str) -> None:
-    _log(f"paste_to_window: hwnd={hex(hwnd)}, text_len={len(text)}, "
-         f"text_preview={repr(text[:60])}")
+    _log(f"paste_to_window: hwnd={hex(hwnd)}, text_len={len(text)}")
 
     # 1. Clipboard first — always, so manual Ctrl+V works regardless
     clip_ok = _write_clipboard(text)

@@ -1,4 +1,5 @@
-"""
+# Copyright (c) 2026 Thorben Meier. MIT License.
+r"""
 Lädt das Whisper-Small-Modell in dist\whisper_models\ herunter,
 damit der Inno-Setup-Installer es direkt mitbündeln kann.
 Wird nur vom Build-Script aufgerufen, nicht von der App selbst.

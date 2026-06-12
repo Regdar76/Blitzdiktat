@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 import threading
 from typing import Callable
 from pynput import keyboard

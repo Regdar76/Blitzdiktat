@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 """
 Speichert transkribierte Texte lokal als .txt-Dateien und bereinigt alte Einträge.
 Spiegelt die Logik von audio_recorder.py für Audiodateien.
@@ -24,7 +25,7 @@ def save_transcript(text: str, workflow_name: str = "") -> str:
     Gibt den Dateipfad zurück.
     """
     ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = f"blitztext_{ts}.txt"
+    filename = f"blitzdiktat_{ts}.txt"
     path = os.path.join(transcripts_dir(), filename)
 
     header_lines = [f"Datum: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"]
@@ -126,6 +127,14 @@ def save_protocol_as_pdf(text: str) -> str:
         fontSize=10, leading=14, spaceAfter=2,
         leftIndent=14,
     )
+    st_cell = ParagraphStyle(
+        "BT_Cell", parent=base["Normal"],
+        fontSize=9, leading=12,
+    )
+    st_cell_head = ParagraphStyle(
+        "BT_CellHead", parent=st_cell,
+        fontName="Helvetica-Bold",
+    )
 
     story = []
     lines = text.split("\n")
@@ -135,22 +144,36 @@ def save_protocol_as_pdf(text: str) -> str:
         if not table_rows:
             return
         col_count = max(len(r) for r in table_rows)
-        col_w = (doc.width) / col_count
-        col_widths = [col_w] * col_count
+        # Erste Spalte (Aufgabe/Beschreibung) bekommt mehr Platz als die übrigen.
+        if col_count > 1:
+            first = doc.width * 0.5
+            rest = (doc.width - first) / (col_count - 1)
+            col_widths = [first] + [rest] * (col_count - 1)
+        else:
+            col_widths = [doc.width]
 
-        tbl = Table(table_rows, colWidths=col_widths, hAlign="LEFT")
+        # Paragraph-Zellen brechen langen Text automatisch um.
+        data = [
+            [
+                Paragraph(
+                    _md_inline(row[i]) if i < len(row) else "",
+                    st_cell_head if r == 0 else st_cell,
+                )
+                for i in range(col_count)
+            ]
+            for r, row in enumerate(table_rows)
+        ]
+
+        tbl = Table(data, colWidths=col_widths, hAlign="LEFT")
         tbl.setStyle(TableStyle([
             ("BACKGROUND",    (0, 0), (-1, 0),  colors.HexColor("#E5E7EB")),
-            ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
-            ("FONTNAME",      (0, 1), (-1, -1), "Helvetica"),
-            ("FONTSIZE",      (0, 0), (-1, -1), 9),
             ("GRID",          (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
             ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.white, colors.HexColor("#F9FAFB")]),
             ("TOPPADDING",    (0, 0), (-1, -1), 4),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ("LEFTPADDING",   (0, 0), (-1, -1), 6),
             ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
-            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
         ]))
         story.append(tbl)
         story.append(Spacer(1, 8))

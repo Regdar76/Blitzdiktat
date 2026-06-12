@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 """
 System tray icon — equivalent to macOS MenuBarStatusController.
 Provides a right-click menu for quick workflow launch and a left-click

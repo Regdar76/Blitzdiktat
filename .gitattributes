@@ -1,2 +1,15 @@
-# Auto detect text files and perform LF normalization
+# Zeilenenden normalisieren; plattformkritische Skripte festnageln
 * text=auto
+
+# Unix-Skripte brauchen LF (macOS-CI, Gradle-Wrapper auf Linux)
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Windows-Batch braucht CRLF
+*.bat text eol=crlf
+
+# Binärdateien
+*.png binary
+*.icns binary
+*.jar binary
+*.ico binary

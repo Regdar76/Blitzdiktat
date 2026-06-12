@@ -1,3 +1,26 @@
+# Android (BlitzdiktatAndroid)
+BlitzdiktatAndroid/.gradle/
+BlitzdiktatAndroid/.kotlin/
+BlitzdiktatAndroid/local.properties
+BlitzdiktatAndroid/**/build/
+*.apk
+
+# Android signing — niemals einchecken
+BlitzdiktatAndroid/key.properties
+*.jks
+*.keystore
+
+# Python (BlitzdiktatWin)
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+BlitzdiktatWin/packages/
+BlitzdiktatWin/build/
+BlitzdiktatWin/dist/
+*.egg-info/
+
 # Xcode
 *.xcuserstate
 *.xcuserdatad/
@@ -30,3 +53,6 @@ Secrets.swift
 
 # Tooling
 node_modules/
+
+# Claude Code lokale Einstellungen
+.claude/settings.local.json

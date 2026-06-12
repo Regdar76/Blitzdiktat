@@ -30,8 +30,8 @@ Nimmt eine Besprechung, ein Meeting oder eine Baubesprechung auf und erstellt da
 ## Installation
 
 ```bat
-git clone https://github.com/cmagnussen/blitztext-app.git
-cd blitztext-app\BlitzdiktatWin
+git clone https://github.com/Regdar76/Blitzdiktat.git
+cd Blitzdiktat\BlitzdiktatWin
 pip install -r requirements.txt
 ```
 
