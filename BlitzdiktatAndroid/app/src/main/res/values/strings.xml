@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Blitzdiktat</string>
+    <string name="ime_label">Blitzdiktat Tastatur</string>
+    <string name="ime_subtype_label">Blitzdiktat (Diktat)</string>
+</resources>

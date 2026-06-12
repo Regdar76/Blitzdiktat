@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 import threading
 
 from services.audio_recorder import AudioRecorder

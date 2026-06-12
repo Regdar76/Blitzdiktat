@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 """
 Main popup window — equivalent to the macOS popover.
 Frameless, always-on-top, draggable via title bar.
@@ -12,6 +13,7 @@ import customtkinter as ctk
 from app_state import AppState
 from features.workflows.base_workflow import WorkflowPhase, WorkflowType
 from services import paste_service
+from version import __version__
 from services.audio_recorder import recordings_dir
 from services.transcript_store import transcripts_dir
 
@@ -105,9 +107,9 @@ class MainWindow:
 
         version_label = ctk.CTkLabel(
             title_bar,
-            text="v1.1.2",
+            text=f"v{__version__}",
             font=ctk.CTkFont(size=10),
-            text_color=("#9CA3AF", "#6B7280"),
+            text_color=("#9CA3AF", "#9B9BA0"),
             cursor="fleur",
         )
         version_label.pack(side="left", padx=(6, 0))
@@ -147,6 +149,7 @@ class MainWindow:
         self._wf_buttons:     dict[WorkflowType, ctk.CTkButton] = {}
         self._wf_containers:  dict[WorkflowType, ctk.CTkFrame]  = {}
         self._wf_subtitles:   dict[WorkflowType, ctk.CTkLabel]  = {}
+        self._import_btn:     ctk.CTkButton | None               = None
 
         for wtype, emoji in [
             (WorkflowType.TRANSCRIPTION,  "🎙️"),
@@ -167,20 +170,52 @@ class MainWindow:
             container.pack(fill="x", pady=2)
 
             # Main button (transparent on the coloured frame)
-            btn = ctk.CTkButton(
-                container,
-                text=f"{emoji}  {self._app.workflow_display_name(wtype)}",
-                height=_BTN_H,
-                anchor="w",
-                fg_color="transparent",
-                hover_color=hover,
-                text_color="white",
-                text_color_disabled="#D0D0D0",
-                font=ctk.CTkFont(size=13, weight="bold"),
-                corner_radius=8,
-                command=lambda t=wtype: self._on_workflow_click(t),
-            )
-            btn.pack(fill="x")
+            if wtype == WorkflowType.PROTOKOLL:
+                btn_row = ctk.CTkFrame(container, fg_color="transparent")
+                btn_row.pack(fill="x")
+                btn = ctk.CTkButton(
+                    btn_row,
+                    text=f"{emoji}  {self._app.workflow_display_name(wtype)}",
+                    height=_BTN_H,
+                    anchor="w",
+                    fg_color="transparent",
+                    hover_color=hover,
+                    text_color="white",
+                    text_color_disabled="#D0D0D0",
+                    font=ctk.CTkFont(size=13, weight="bold"),
+                    corner_radius=8,
+                    command=lambda t=wtype: self._on_workflow_click(t),
+                )
+                btn.pack(side="left", fill="x", expand=True)
+                self._import_btn = ctk.CTkButton(
+                    btn_row,
+                    text="📂",
+                    width=36,
+                    height=_BTN_H,
+                    fg_color="transparent",
+                    hover_color=hover,
+                    text_color="white",
+                    text_color_disabled="#D0D0D0",
+                    font=ctk.CTkFont(size=14),
+                    corner_radius=8,
+                    command=self._on_import_click,
+                )
+                self._import_btn.pack(side="right", padx=(0, 4))
+            else:
+                btn = ctk.CTkButton(
+                    container,
+                    text=f"{emoji}  {self._app.workflow_display_name(wtype)}",
+                    height=_BTN_H,
+                    anchor="w",
+                    fg_color="transparent",
+                    hover_color=hover,
+                    text_color="white",
+                    text_color_disabled="#D0D0D0",
+                    font=ctk.CTkFont(size=13, weight="bold"),
+                    corner_radius=8,
+                    command=lambda t=wtype: self._on_workflow_click(t),
+                )
+                btn.pack(fill="x")
 
             # Subtitle label
             sub = ctk.CTkLabel(
@@ -217,6 +252,7 @@ class MainWindow:
             height=34,
             fg_color="transparent",
             border_width=1,
+            border_color=("#D1D5DB", "#4B5563"),
             text_color=("#374151", "#D1D5DB"),
             command=self._open_recordings_folder,
         ).pack(fill="x", pady=(0, 4))
@@ -227,19 +263,37 @@ class MainWindow:
             height=34,
             fg_color="transparent",
             border_width=1,
+            border_color=("#D1D5DB", "#4B5563"),
             text_color=("#374151", "#D1D5DB"),
             command=self._open_transcripts_folder,
         ).pack(fill="x", pady=(0, 4))
 
+        settings_row = ctk.CTkFrame(bottom, fg_color="transparent")
+        settings_row.pack(fill="x")
+
         ctk.CTkButton(
-            bottom,
+            settings_row,
             text="⚙️  Einstellungen",
             height=34,
             fg_color="transparent",
             border_width=1,
+            border_color=("#D1D5DB", "#4B5563"),
             text_color=("#374151", "#D1D5DB"),
             command=self._open_settings,
-        ).pack(fill="x")
+        ).pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+        ctk.CTkButton(
+            settings_row,
+            text="ⓘ",
+            width=34,
+            height=34,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("#D1D5DB", "#4B5563"),
+            text_color=("#374151", "#D1D5DB"),
+            font=ctk.CTkFont(size=15),
+            command=self._open_help,
+        ).pack(side="right")
 
         self._update_ui()
 
@@ -275,6 +329,23 @@ class MainWindow:
             return f"{wtype.subtitle}  ·  {hk}"
         return wtype.subtitle
 
+    def _on_import_click(self) -> None:
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            title="Audiodatei oder Transkript auswählen",
+            filetypes=[
+                ("Unterstützte Dateien", "*.wav *.mp3 *.m4a *.ogg *.flac *.txt *.md"),
+                ("Audiodateien", "*.wav *.mp3 *.m4a *.ogg *.flac"),
+                ("Textdateien", "*.txt *.md"),
+                ("Alle Dateien", "*.*"),
+            ],
+            parent=self._root,
+        )
+        if not path:
+            return
+        self._app.capture_target_window()
+        self._app.import_file_for_protokoll(path)
+
     def _on_workflow_click(self, wtype: WorkflowType) -> None:
         wf = self._app.active_workflow
         if wf and wf.workflow_type == wtype and wf.is_recording:
@@ -292,6 +363,10 @@ class MainWindow:
     def _open_settings(self) -> None:
         from features.ui.settings_window import SettingsWindow
         SettingsWindow(self._root, self._app)   # kein hide() mehr
+
+    def _open_help(self) -> None:
+        from features.ui.help_window import HelpWindow
+        HelpWindow(self._root, settings=self._app.settings)
 
     def _on_state_changed(self, state: AppState) -> None:
         self._root.after(0, self._update_ui)
@@ -381,6 +456,11 @@ class MainWindow:
                     fg_color=_dim(wtype.color) if disabled else wtype.color
                 )
                 sub.configure(text=self._subtitle(wtype))   # restore subtitle
+
+        if self._import_btn:
+            self._import_btn.configure(
+                state="disabled" if active_type is not None else "normal"
+            )
 
     # ------------------------------------------------------------------
     # Positionierung beim ersten Öffnen

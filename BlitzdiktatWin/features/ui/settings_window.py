@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 """
 Settings window — equivalent to macOS SettingsContentView.
 Opens as a modal dialog from the main window.
@@ -12,6 +13,7 @@ from app_state import AppState
 from services import credentials_service, paste_service
 from services.local_transcription_service import MODELS as WHISPER_MODELS, cache_dir, is_model_cached
 from services.audio_recorder import list_input_devices
+from version import __version__
 
 
 class SettingsWindow(ctk.CTkToplevel):
@@ -33,10 +35,44 @@ class SettingsWindow(ctk.CTkToplevel):
     # ------------------------------------------------------------------
 
     def _build(self) -> None:
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=16, pady=(10, 0))
+        ctk.CTkButton(
+            header,
+            text="📖  Handbuch",
+            width=130,
+            height=28,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("#D1D5DB", "#4B5563"),
+            text_color=("#374151", "#D1D5DB"),
+            hover_color=("#F3F4F6", "#374151"),
+            command=self._open_help,
+        ).pack(side="right")
+
         scroll = ctk.CTkScrollableFrame(self)
-        scroll.pack(fill="both", expand=True, padx=16, pady=16)
+        scroll.pack(fill="both", expand=True, padx=16, pady=(8, 16))
 
         s = self._app.settings
+
+        # ---- Darstellung ------------------------------------------
+        self._section(scroll, "Darstellung")
+        _appearance_map = {
+            "System (automatisch)": "System",
+            "Hell":                 "Light",
+            "Dunkel":               "Dark",
+        }
+        self._appearance_map = _appearance_map
+        _value_to_label = {v: k for k, v in _appearance_map.items()}
+        current_appearance_label = _value_to_label.get(s.appearance_mode, "System (automatisch)")
+        self._appearance_var = ctk.StringVar(value=current_appearance_label)
+        ctk.CTkOptionMenu(
+            scroll,
+            values=list(_appearance_map.keys()),
+            variable=self._appearance_var,
+            width=220,
+            command=self._on_appearance_change,
+        ).pack(anchor="w", pady=(0, 12))
 
         # ---- Mikrofon -----------------------------------------------
         self._section(scroll, "Mikrofon")
@@ -156,6 +192,58 @@ class SettingsWindow(ctk.CTkToplevel):
             command=self._save_api_key,
         ).pack(anchor="w", pady=(0, 12))
 
+        # ---- OpenAI-Modelle ----------------------------------------
+        from services.llm_service import DEFAULT_MODEL_FAST, DEFAULT_MODEL_QUALITY
+
+        self._section(scroll, "OpenAI-Modelle")
+
+        self._llm_std_fast = f"Standard ({DEFAULT_MODEL_FAST})"
+        self._llm_std_quality = f"Standard ({DEFAULT_MODEL_QUALITY})"
+        _llm_choices = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"]
+
+        def _llm_values(saved: str, std_label: str) -> list[str]:
+            # Per Hand in settings.json eingetragene Modelle bleiben wählbar.
+            values = [std_label] + _llm_choices
+            if saved and saved not in values:
+                values.append(saved)
+            return values
+
+        ctk.CTkLabel(scroll, text="Schnelles Modell").pack(anchor="w")
+        ctk.CTkLabel(
+            scroll,
+            text="Für Blitzdiktat+, Blitzdiktat :) und Vokabular-Extraktion.",
+            font=ctk.CTkFont(size=11),
+            text_color=("#6B7280", "#9CA3AF"),
+        ).pack(anchor="w", pady=(0, 2))
+        self._llm_fast_var = ctk.StringVar(
+            value=s.openai_model_fast or self._llm_std_fast
+        )
+        ctk.CTkOptionMenu(
+            scroll,
+            values=_llm_values(s.openai_model_fast, self._llm_std_fast),
+            variable=self._llm_fast_var,
+            width=260,
+            command=self._on_llm_fast_change,
+        ).pack(anchor="w", pady=(0, 8))
+
+        ctk.CTkLabel(scroll, text="Qualitätsmodell").pack(anchor="w")
+        ctk.CTkLabel(
+            scroll,
+            text="Für Blitzdiktat Protokoll und Blitzdiktat $%&!.",
+            font=ctk.CTkFont(size=11),
+            text_color=("#6B7280", "#9CA3AF"),
+        ).pack(anchor="w", pady=(0, 2))
+        self._llm_quality_var = ctk.StringVar(
+            value=s.openai_model_quality or self._llm_std_quality
+        )
+        ctk.CTkOptionMenu(
+            scroll,
+            values=_llm_values(s.openai_model_quality, self._llm_std_quality),
+            variable=self._llm_quality_var,
+            width=260,
+            command=self._on_llm_quality_change,
+        ).pack(anchor="w", pady=(0, 12))
+
         # ---- Sprache -----------------------------------------------
         self._section(scroll, "Sprache")
         self._lang_var = ctk.StringVar(value=s.language)
@@ -166,6 +254,43 @@ class SettingsWindow(ctk.CTkToplevel):
             width=120,
         )
         lang_menu.pack(anchor="w", pady=(0, 12))
+
+        # ---- Gelerntes Vokabular -----------------------------------
+        from services import vocabulary_service
+        self._section(scroll, "Gelerntes Vokabular")
+        ctk.CTkLabel(
+            scroll,
+            text="Automatisch gelernte Begriffe — ein Begriff pro Zeile. "
+                 "Direkt bearbeiten, manuell ergänzen oder einzelne Einträge löschen.",
+            font=ctk.CTkFont(size=11),
+            text_color=("#6B7280", "#9CA3AF"),
+            wraplength=440,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 4))
+
+        self._vocab_box = ctk.CTkTextbox(scroll, width=400, height=150)
+        self._vocab_box.insert("1.0", "\n".join(vocabulary_service.get_learned_terms()))
+        self._vocab_box.pack(anchor="w", pady=(0, 6))
+
+        _vocab_btn_row = ctk.CTkFrame(scroll, fg_color="transparent")
+        _vocab_btn_row.pack(anchor="w", pady=(0, 12))
+        ctk.CTkButton(
+            _vocab_btn_row,
+            text="Vokabular speichern",
+            width=180,
+            command=self._save_vocabulary,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            _vocab_btn_row,
+            text="Alles löschen",
+            fg_color="transparent",
+            border_width=1,
+            border_color=("#D1D5DB", "#4B5563"),
+            text_color=("#374151", "#D1D5DB"),
+            hover_color=("#F3F4F6", "#374151"),
+            width=120,
+            command=self._clear_vocabulary,
+        ).pack(side="left")
 
         # ---- Hotkeys -----------------------------------------------
         self._section(scroll, "Tastenkürzel (z. B. ctrl+shift+r)")
@@ -260,6 +385,17 @@ class SettingsWindow(ctk.CTkToplevel):
             height=40,
         ).pack(fill="x", pady=(8, 0))
 
+        # ---- Über ------------------------------------------------------
+        ctk.CTkFrame(scroll, height=1, fg_color=("#E5E7EB", "#374151")).pack(
+            fill="x", pady=(12, 4)
+        )
+        ctk.CTkLabel(
+            scroll,
+            text=f"© 2026 Thorben Meier  ·  MIT License  ·  v{__version__}",
+            font=ctk.CTkFont(size=10),
+            text_color=("#9CA3AF", "#6B7280"),
+        ).pack(pady=(0, 8))
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -282,6 +418,36 @@ class SettingsWindow(ctk.CTkToplevel):
         entry.insert(0, default)
         entry.pack(side="left")
         return entry
+
+    def _open_help(self) -> None:
+        from features.ui.help_window import HelpWindow
+        HelpWindow(self, settings=self._app.settings)
+
+    def _save_vocabulary(self) -> None:
+        from services import vocabulary_service
+        raw = self._vocab_box.get("1.0", "end").strip()
+        terms = [t.strip() for t in raw.splitlines() if t.strip()]
+        seen: set[str] = set()
+        unique: list[str] = []
+        for t in terms:
+            if t.lower() not in seen:
+                seen.add(t.lower())
+                unique.append(t)
+        vocabulary_service.clear()
+        vocabulary_service.add_terms(unique)
+        self._show_toast(f"{len(unique)} Begriff{'e' if len(unique) != 1 else ''} gespeichert ✓")
+
+    def _clear_vocabulary(self) -> None:
+        from services import vocabulary_service
+        vocabulary_service.clear()
+        self._vocab_box.delete("1.0", "end")
+        self._show_toast("Vokabular gelöscht ✓")
+
+    def _on_appearance_change(self, label: str) -> None:
+        mode = self._appearance_map.get(label, "System")
+        ctk.set_appearance_mode(mode)
+        self._app.settings.appearance_mode = mode
+        self._app.save_settings()
 
     def _on_mic_change(self, label: str) -> None:
         _DEFAULT = "Standard (Systemstandard)"
@@ -313,6 +479,18 @@ class SettingsWindow(ctk.CTkToplevel):
         self._app.save_settings()
         self._model_status.configure(text=self._model_status_text(model_name))
 
+    def _on_llm_fast_change(self, label: str) -> None:
+        self._app.settings.openai_model_fast = (
+            "" if label == self._llm_std_fast else label
+        )
+        self._app.save_settings()
+
+    def _on_llm_quality_change(self, label: str) -> None:
+        self._app.settings.openai_model_quality = (
+            "" if label == self._llm_std_quality else label
+        )
+        self._app.save_settings()
+
     def _save_api_key(self) -> None:
         key = self._api_entry.get().strip()
         if key:
@@ -340,6 +518,9 @@ class SettingsWindow(ctk.CTkToplevel):
             t.strip() for t in raw_terms.split(",") if t.strip()
         ]
         s.text_improvement.system_prompt = self._prompt_box.get("1.0", "end").strip()
+
+        s.appearance_mode = self._appearance_map.get(self._appearance_var.get(), "System")
+        ctk.set_appearance_mode(s.appearance_mode)
 
         s.dampf_ablassen.system_prompt = self._dampf_prompt.get("1.0", "end").strip()
         s.emoji_text.emoji_density = self._emoji_var.get()

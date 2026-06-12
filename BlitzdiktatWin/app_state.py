@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 """
 Central app state — mirrors the role of AppState.swift.
 Settings are persisted to %APPDATA%\\Blitzdiktat\\settings.json.
@@ -14,9 +15,9 @@ from features.workflows.transcription_workflow import TranscriptionWorkflow
 from features.workflows.text_improvement_workflow import TextImprovementWorkflow
 from features.workflows.dampf_ablassen_workflow import DampfAblassenWorkflow
 from features.workflows.emoji_text_workflow import EmojiTextWorkflow
-from features.workflows.protokoll_workflow import ProtokolllWorkflow
+from features.workflows.protokoll_workflow import ProtokollWorkflow
 from services.hotkey_service import HotkeyService
-from services import credentials_service, paste_service
+from services import credentials_service, paste_service, vocabulary_service
 from services.audio_recorder import find_device_index
 from services.transcript_store import save_transcript, save_protocol_as_pdf
 
@@ -47,7 +48,7 @@ class EmojiTextSettings:
 
 
 @dataclass
-class ProtokolllSettings:
+class ProtokollSettings:
     system_prompt: str = ""
     custom_name: str = ""
 
@@ -62,13 +63,19 @@ class AppSettings:
     hotkey_dampf_ablassen: str = "ctrl+shift+d"
     hotkey_emoji_text: str = "ctrl+shift+e"
     hotkey_protokoll: str = "ctrl+shift+p"
+    appearance_mode: str = "System"         # "System" | "Light" | "Dark"
     transcription_backend: str = "local"    # "online" | "local"
     local_whisper_model: str = "small"
+    # OpenAI-Modellnamen, leer = eingebauter Standard (siehe llm_service /
+    # transcription_service). Nur über settings.json änderbar.
+    openai_model_fast: str = ""
+    openai_model_quality: str = ""
+    openai_transcription_model: str = ""
     selected_microphone: str = ""           # "" = Systemstandard
     text_improvement: TextImprovementSettings = field(default_factory=TextImprovementSettings)
     dampf_ablassen: DampfAblassenSettings = field(default_factory=DampfAblassenSettings)
     emoji_text: EmojiTextSettings = field(default_factory=EmojiTextSettings)
-    protokoll: ProtokolllSettings = field(default_factory=ProtokolllSettings)
+    protokoll: ProtokollSettings = field(default_factory=ProtokollSettings)
 
 
 # ------------------------------------------------------------------
@@ -100,7 +107,11 @@ def _load_settings() -> AppSettings:
         s.hotkey_protokoll = data.get("hotkey_protokoll", s.hotkey_protokoll)
         s.transcription_backend = data.get("transcription_backend", s.transcription_backend)
         s.local_whisper_model = data.get("local_whisper_model", s.local_whisper_model)
+        s.openai_model_fast = data.get("openai_model_fast", s.openai_model_fast)
+        s.openai_model_quality = data.get("openai_model_quality", s.openai_model_quality)
+        s.openai_transcription_model = data.get("openai_transcription_model", s.openai_transcription_model)
         s.selected_microphone = data.get("selected_microphone", s.selected_microphone)
+        s.appearance_mode = data.get("appearance_mode", s.appearance_mode)
 
         ti = data.get("text_improvement", {})
         s.text_improvement = TextImprovementSettings(
@@ -124,7 +135,7 @@ def _load_settings() -> AppSettings:
         )
 
         pr = data.get("protokoll", {})
-        s.protokoll = ProtokolllSettings(
+        s.protokoll = ProtokollSettings(
             system_prompt=pr.get("system_prompt", ""),
             custom_name=pr.get("custom_name", ""),
         )
@@ -142,9 +153,14 @@ def _save_settings(s: AppSettings) -> None:
         "hotkey_text_improver": s.hotkey_text_improver,
         "hotkey_dampf_ablassen": s.hotkey_dampf_ablassen,
         "hotkey_emoji_text": s.hotkey_emoji_text,
+        "hotkey_protokoll": s.hotkey_protokoll,
         "transcription_backend": s.transcription_backend,
         "local_whisper_model": s.local_whisper_model,
+        "openai_model_fast": s.openai_model_fast,
+        "openai_model_quality": s.openai_model_quality,
+        "openai_transcription_model": s.openai_transcription_model,
         "selected_microphone": s.selected_microphone,
+        "appearance_mode": s.appearance_mode,
         "text_improvement": asdict(s.text_improvement),
         "dampf_ablassen": asdict(s.dampf_ablassen),
         "emoji_text": asdict(s.emoji_text),
@@ -164,9 +180,16 @@ def _save_settings(s: AppSettings) -> None:
 AppStateCallback = Callable[["AppState"], None]
 
 
+def _apply_model_overrides(s: AppSettings) -> None:
+    from services import llm_service, transcription_service
+    llm_service.set_models(s.openai_model_fast, s.openai_model_quality)
+    transcription_service.set_transcription_model(s.openai_transcription_model)
+
+
 class AppState:
     def __init__(self):
         self.settings: AppSettings = _load_settings()
+        _apply_model_overrides(self.settings)
         self.active_workflow: BaseWorkflow | None = None
         self.hotkey_service = HotkeyService()
         self._subscribers: list[AppStateCallback] = []
@@ -243,10 +266,14 @@ class AppState:
         local_model = s.local_whisper_model
         device = find_device_index(s.selected_microphone)
 
+        all_terms = list(dict.fromkeys(
+            s.text_improvement.custom_terms + vocabulary_service.get_learned_terms()
+        ))
+
         if wtype == WorkflowType.TRANSCRIPTION:
             workflow = TranscriptionWorkflow(
                 language=s.language,
-                custom_terms=s.text_improvement.custom_terms,
+                custom_terms=all_terms,
                 backend=backend, local_model=local_model, device=device,
             )
         elif wtype == WorkflowType.TEXT_IMPROVER:
@@ -265,9 +292,10 @@ class AppState:
                 backend=backend, local_model=local_model, device=device,
             )
         elif wtype == WorkflowType.PROTOKOLL:
-            workflow = ProtokolllWorkflow(
+            workflow = ProtokollWorkflow(
                 settings=s.protokoll, language=s.language,
                 backend=backend, local_model=local_model, device=device,
+                custom_terms=all_terms,
             )
         else:
             return
@@ -287,6 +315,29 @@ class AppState:
         if wf:
             wf.stop()
 
+    def import_file_for_protokoll(self, path: str) -> None:
+        if not self.is_configured:
+            return
+        self._stop_active()
+        s = self.settings
+        all_terms = list(dict.fromkeys(
+            s.text_improvement.custom_terms + vocabulary_service.get_learned_terms()
+        ))
+        workflow = ProtokollWorkflow(
+            settings=s.protokoll,
+            language=s.language,
+            backend=s.transcription_backend,
+            local_model=s.local_whisper_model,
+            device=find_device_index(s.selected_microphone),
+            custom_terms=all_terms,
+        )
+        workflow.on_state_change = self._on_workflow_state
+        workflow.on_output = self._on_workflow_output
+        with self._lock:
+            self.active_workflow = workflow
+        workflow.import_file(path)
+        self._notify()
+
     def reset_workflow(self) -> None:
         self._stop_active()
         with self._lock:
@@ -295,6 +346,7 @@ class AppState:
 
     def save_settings(self) -> None:
         _save_settings(self.settings)
+        _apply_model_overrides(self.settings)
         self._rebind_hotkeys()
 
     # ------------------------------------------------------------------
@@ -364,7 +416,31 @@ class AppState:
                 args=(text,),
                 daemon=True,
             ).start()
+        # Vokabular-Extraktion nutzt die OpenAI-API. Beim reinen Blitzdiktat mit
+        # lokalem Backend darf nichts das Gerät verlassen — dort überspringen.
+        is_fully_local = (
+            wf_type == WorkflowType.TRANSCRIPTION
+            and self.settings.transcription_backend == "local"
+        )
+        if credentials_service.is_configured() and not is_fully_local:
+            threading.Thread(
+                target=self._extract_vocabulary_bg,
+                args=(text,),
+                daemon=True,
+            ).start()
         self._notify()
+
+    def _extract_vocabulary_bg(self, text: str) -> None:
+        import asyncio
+        from services import llm_service
+        try:
+            loop = asyncio.new_event_loop()
+            terms = loop.run_until_complete(llm_service.extract_terms(text))
+            loop.close()
+            if terms:
+                vocabulary_service.add_terms(terms)
+        except Exception:
+            pass
 
     def _stop_active(self) -> None:
         with self._lock:

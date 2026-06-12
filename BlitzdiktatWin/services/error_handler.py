@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 """
 Übersetzt OpenAI-SDK-Exceptions in kurze, deutsche Fehlermeldungen.
 """

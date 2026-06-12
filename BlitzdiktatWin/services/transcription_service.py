@@ -1,7 +1,20 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 import asyncio
 import re
 from openai import AsyncOpenAI, APIConnectionError, APITimeoutError, APIStatusError
 from .credentials_service import load_api_key
+
+# Standardmodell für Online-Transkription — überschreibbar in settings.json
+# über das Feld "openai_transcription_model" (leer = Standard).
+DEFAULT_TRANSCRIPTION_MODEL = "whisper-1"
+
+_transcription_model = DEFAULT_TRANSCRIPTION_MODEL
+
+
+def set_transcription_model(name: str = "") -> None:
+    """Setzt das Online-Transkriptionsmodell. Leerer String = Standard."""
+    global _transcription_model
+    _transcription_model = (name or "").strip() or DEFAULT_TRANSCRIPTION_MODEL
 
 
 def _build_numbered_list(match: re.Match) -> str:
@@ -53,11 +66,11 @@ async def _transcribe_online(
     if not api_key:
         raise RuntimeError("OpenAI API Key fehlt. Bitte in den Einstellungen hinterlegen.")
 
-    client = AsyncOpenAI(api_key=api_key)
+    client = AsyncOpenAI(api_key=api_key, timeout=120.0, max_retries=1)
     prompt = ", ".join(custom_terms) if custom_terms else None
 
     with open(audio_path, "rb") as f:
-        kwargs: dict = dict(model="whisper-1", file=f, language=language)
+        kwargs: dict = dict(model=_transcription_model, file=f, language=language)
         if prompt:
             kwargs["prompt"] = prompt
         response = await client.audio.transcriptions.create(**kwargs)

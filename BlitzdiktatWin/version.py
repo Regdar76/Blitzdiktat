@@ -1,4 +1,5 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 """Zentrale Versionsdefinition für Blitzdiktat (Windows)."""
 
-__version__ = "1.1.2"
-VERSION_TUPLE = (1, 1, 2, 0)
+__version__ = "2.1.3"
+VERSION_TUPLE = (2, 1, 3, 0)

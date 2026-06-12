@@ -1,9 +1,13 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 from PIL import Image, ImageDraw
 import os
 
 sizes = [16, 32, 48, 64, 128, 256]
-base = r"C:\Github\blitztext-app-main\BlitztextMac\Resources\Assets.xcassets\AppIcon.appiconset"
-out = os.path.join(os.path.dirname(__file__), "blitztext.ico")
+# Icon-Quelldateien aus dem Mac-Projekt im selben Repo; fehlen sie,
+# wird unten ein einfaches Blitz-Icon generiert.
+_repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+base = os.path.join(_repo_root, "BlitztextMac", "Resources", "Assets.xcassets", "AppIcon.appiconset")
+out = os.path.join(os.path.dirname(__file__), "blitzdiktat.ico")
 
 frames = []
 for size in sizes:

@@ -45,8 +45,8 @@ The intent is not to ship a one-click finished app. The intent is to make a real
 ## Setup
 
 ```bat
-
-cd blitztext-app\BlitzdiktatWin
+git clone https://github.com/Regdar76/Blitzdiktat.git
+cd Blitzdiktat\BlitzdiktatWin
 pip install -r requirements.txt
 ```
 
@@ -105,6 +105,8 @@ Text rewriting:       Your PC → OpenAI Chat Completions API
 
 Your OpenAI API key is stored in the Windows Credential Manager.
 
+The OpenAI model names default to `gpt-4o-mini` / `gpt-4o` / `whisper-1` and can be overridden in `%APPDATA%\Blitzdiktat\settings.json` via `openai_model_fast`, `openai_model_quality`, and `openai_transcription_model` (empty = default).
+
 Read [docs/privacy.md](docs/privacy.md) before using the preview with sensitive content.
 
 ## Project Structure
@@ -112,6 +114,7 @@ Read [docs/privacy.md](docs/privacy.md) before using the preview with sensitive 
 ```
 BlitzdiktatWin/
   main.py              Entry point
+  tests/               pytest suite (voice commands, settings, vocabulary)
   app_state.py         Central app state
   services/
     credentials_service.py        Windows Credential Manager
@@ -128,8 +131,12 @@ BlitzdiktatWin/
     ui/                Main window + settings window (customtkinter)
   requirements.txt
   run.bat
+BlitzdiktatAndroid/  Android companion app (Kotlin/Compose + dictation keyboard, see its README)
+BlitztextMac/     macOS sibling app "Blitztext" (Swift, built via build.sh)
 docs/             Setup, privacy, roadmap, local models
 ```
+
+> Note: this repository also contains **Blitztext**, the macOS counterpart of this app, in `BlitztextMac/`, and **Blitzdiktat for Android** in `BlitzdiktatAndroid/`. Both are covered by their own CI jobs (`build-macos`, `check-android`). The rest of this README describes the Windows app.
 
 ## Local Transcription
 

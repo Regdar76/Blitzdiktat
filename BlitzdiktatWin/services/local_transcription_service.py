@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Thorben Meier. MIT License.
 """
 Lokale Offline-Transkription via faster-whisper (CTranslate2-Backend).
 Modelle werden beim ersten Einsatz automatisch von HuggingFace geladen
@@ -5,31 +6,7 @@ und in %APPDATA%\\Blitzdiktat\\whisper_models gespeichert.
 """
 
 import os
-import sys
 import threading
-
-# ── Belt-and-suspenders: add packages to sys.path ──────────────────────────
-# Priority 1: local packages/ dir next to main.py (always accessible,
-# independent of user profile, roaming AppData, or network drives)
-_here = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "packages"))
-if os.path.isdir(_here) and _here not in sys.path:
-    sys.path.insert(0, _here)
-
-# Priority 2: user site-packages via Python API
-try:
-    import site as _site
-    _u = _site.getusersitepackages()
-    if _u and os.path.isdir(_u) and _u not in sys.path:
-        sys.path.insert(0, _u)
-except Exception:
-    pass
-
-# Priority 3: manual APPDATA fallback
-_appdata = os.environ.get("APPDATA", "")
-if _appdata:
-    _manual = os.path.join(_appdata, "Python", f"Python{sys.version_info.major}{sys.version_info.minor}", "site-packages")
-    if os.path.isdir(_manual) and _manual not in sys.path:
-        sys.path.insert(0, _manual)
 
 _IMPORT_ERROR: str = ""
 try:
