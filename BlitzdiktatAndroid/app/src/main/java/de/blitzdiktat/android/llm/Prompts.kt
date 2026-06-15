@@ -67,6 +67,7 @@ object Prompts {
         - Wenn es keine Entscheidungen oder keine Aufgaben gibt, lasse den jeweiligen Abschnitt weg.
         - Gib keine Platzhalter- oder Beispielzeilen aus.
         - Gruppiere die besprochenen Punkte bei längeren Besprechungen thematisch mit Zwischenüberschriften.
+        - Beginne das Protokoll mit einer kurzen Zusammenfassung der Besprechung in 2–3 Sätzen, die das Wichtigste auf den Punkt bringt.
 
         ## Protokoll
 
@@ -75,6 +76,9 @@ object Prompts {
         **Teilnehmer:** [Namen, nur falls genannt — sonst Zeile weglassen]
 
         ---
+
+        ### Zusammenfassung
+        [2–3 Sätze, die das Wichtigste der Besprechung zusammenfassen]
 
         ### Besprochene Punkte
         - [Punkt 1]

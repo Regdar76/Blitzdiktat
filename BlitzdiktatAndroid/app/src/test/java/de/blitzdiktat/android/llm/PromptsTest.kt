@@ -48,6 +48,17 @@ class PromptsTest {
     }
 
     @Test
+    fun protokollContainsSummarySection() {
+        assertTrue(Prompts.PROTOKOLL.contains("### Zusammenfassung"))
+        assertTrue(Prompts.PROTOKOLL.contains("kurzen Zusammenfassung"))
+        // Zusammenfassung muss vor den besprochenen Punkten stehen (Kurzfassung oben)
+        assertTrue(
+            Prompts.PROTOKOLL.indexOf("### Zusammenfassung") <
+                Prompts.PROTOKOLL.indexOf("### Besprochene Punkte"),
+        )
+    }
+
+    @Test
     fun vocabularyHintIsEmptyWithoutTerms() {
         assertTrue(Prompts.vocabularyHint(emptyList()).isEmpty())
     }
