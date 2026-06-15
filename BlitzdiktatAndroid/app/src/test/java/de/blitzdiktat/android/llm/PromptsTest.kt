@@ -51,6 +51,8 @@ class PromptsTest {
     fun protokollContainsSummarySection() {
         assertTrue(Prompts.PROTOKOLL.contains("### Zusammenfassung"))
         assertTrue(Prompts.PROTOKOLL.contains("kurzen Zusammenfassung"))
+        // Die Zusammenfassung muss für Außenstehende selbsterklärend sein
+        assertTrue(Prompts.PROTOKOLL.contains("nicht dabei war"))
         // Zusammenfassung muss vor den besprochenen Punkten stehen (Kurzfassung oben)
         assertTrue(
             Prompts.PROTOKOLL.indexOf("### Zusammenfassung") <
