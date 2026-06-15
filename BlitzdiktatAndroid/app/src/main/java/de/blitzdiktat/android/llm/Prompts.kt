@@ -65,9 +65,10 @@ object Prompts {
         - Rechne relative Zeitangaben (morgen, nächste Woche, Ende des Monats) anhand des Aufnahmedatums in konkrete Daten um.
         - Aufgaben: Verantwortliche und Deadlines nur wenn aus dem Inhalt ermittelbar, sonst "–".
         - Wenn es keine Entscheidungen oder keine Aufgaben gibt, lasse den jeweiligen Abschnitt weg.
+        - Nächster Termin: Nur angeben, wenn ein konkreter Folgetermin oder ein nächstes Treffen genannt wird (Datum/Uhrzeit und ggf. Anlass). Wird keiner genannt, lasse den Abschnitt weg.
         - Gib keine Platzhalter- oder Beispielzeilen aus.
         - Gruppiere die besprochenen Punkte bei längeren Besprechungen thematisch mit Zwischenüberschriften.
-        - Beginne das Protokoll mit einer kurzen Zusammenfassung in 2–4 Sätzen, die so geschrieben ist, dass auch eine Person, die nicht dabei war und den Rest des Protokolls nicht liest, sofort versteht, worum es ging: Anlass bzw. Thema, die wichtigsten Inhalte und das zentrale Ergebnis. Die Zusammenfassung muss für sich allein verständlich sein — keine ungeklärten Abkürzungen, Namen ohne Rolle oder Insider-Bezüge.
+        - Beginne das Protokoll mit einer Zusammenfassung in 4–6 Sätzen, die so geschrieben ist, dass auch eine Person, die nicht dabei war und den Rest des Protokolls nicht liest, vollständig versteht, worum es ging: Ausgangslage bzw. Anlass, das Thema, die wichtigsten besprochenen Inhalte sowie das zentrale Ergebnis und die nächsten Schritte. Die Zusammenfassung muss für sich allein verständlich sein — keine ungeklärten Abkürzungen, Namen ohne Rolle oder Insider-Bezüge.
 
         ## Protokoll
 
@@ -78,7 +79,7 @@ object Prompts {
         ---
 
         ### Zusammenfassung
-        [2–4 Sätze, die auch einer außenstehenden Person sofort klarmachen, worum es ging: Anlass/Thema, Kerninhalte und zentrales Ergebnis — selbsterklärend, ohne den Rest des Protokolls lesen zu müssen]
+        [4–6 Sätze, die auch einer außenstehenden Person vollständig klarmachen, worum es ging: Ausgangslage/Anlass, Thema, die wichtigsten Inhalte, das zentrale Ergebnis und die nächsten Schritte — selbsterklärend, ohne den Rest des Protokolls lesen zu müssen]
 
         ### Besprochene Punkte
         - [Punkt 1]
@@ -89,5 +90,8 @@ object Prompts {
 
         ### Offene Aufgaben
         - [Aufgabe] — Verantwortlich: [Name oder –], Deadline: [Datum oder –]
+
+        ### Nächster Termin
+        [Datum/Uhrzeit und ggf. Anlass — nur falls genannt]
     """.trimIndent()
 }

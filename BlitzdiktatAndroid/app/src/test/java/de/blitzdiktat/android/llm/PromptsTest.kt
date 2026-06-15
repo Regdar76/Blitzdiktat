@@ -50,13 +50,22 @@ class PromptsTest {
     @Test
     fun protokollContainsSummarySection() {
         assertTrue(Prompts.PROTOKOLL.contains("### Zusammenfassung"))
-        assertTrue(Prompts.PROTOKOLL.contains("kurzen Zusammenfassung"))
         // Die Zusammenfassung muss für Außenstehende selbsterklärend sein
         assertTrue(Prompts.PROTOKOLL.contains("nicht dabei war"))
         // Zusammenfassung muss vor den besprochenen Punkten stehen (Kurzfassung oben)
         assertTrue(
             Prompts.PROTOKOLL.indexOf("### Zusammenfassung") <
                 Prompts.PROTOKOLL.indexOf("### Besprochene Punkte"),
+        )
+    }
+
+    @Test
+    fun protokollContainsNextAppointmentSectionAtEnd() {
+        assertTrue(Prompts.PROTOKOLL.contains("### Nächster Termin"))
+        // "Nächster Termin" steht als letztes, nach den offenen Aufgaben
+        assertTrue(
+            Prompts.PROTOKOLL.indexOf("### Nächster Termin") >
+                Prompts.PROTOKOLL.indexOf("### Offene Aufgaben"),
         )
     }
 
