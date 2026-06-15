@@ -1,5 +1,7 @@
 # Blitztext für macOS
 
+> 🌐 **Deutsch** · [English](README.en.md)
+
 macOS-Version von [Blitzdiktat](../README.md) — gleiche Idee, gleiche Workflows, als native Menüleisten-App.
 
 ## Was es macht

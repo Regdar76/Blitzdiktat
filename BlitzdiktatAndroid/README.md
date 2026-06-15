@@ -1,5 +1,7 @@
 # Blitzdiktat für Android
 
+> 🌐 **Deutsch** · [English](README.en.md)
+
 Android-Version von [Blitzdiktat](../README.md): Diktieren per
 On-Device-Spracherkennung (offline, ohne API-Key) plus die bekannten
 LLM-Workflows mit eigenem OpenAI-Key (BYO-Key, sicher verschlüsselt im

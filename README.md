@@ -1,5 +1,7 @@
 # ⚡ Blitzdiktat
 
+> 🌐 **Deutsch** · [English](README.en.md)
+
 Sprache rein. Text raus. — Diktier- und Schreibassistent für **Windows, Android und macOS**.
 
 Blitzdiktat nimmt Sprache auf, transkribiert sie (lokal, wo immer möglich), verbessert den Text auf Wunsch per LLM und liefert das Ergebnis dorthin, wo es gebraucht wird: ins aktive Fenster, ins Eingabefeld oder in die Zwischenablage.

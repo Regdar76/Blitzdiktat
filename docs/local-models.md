@@ -1,5 +1,7 @@
 # Lokale Modelle
 
+> 🌐 **Deutsch** · [English](local-models.en.md)
+
 Die Transkription läuft lokal — ohne API-Key, Audio verlässt das Gerät nicht:
 
 - **Windows:** `faster-whisper` (CTranslate2-Backend)
