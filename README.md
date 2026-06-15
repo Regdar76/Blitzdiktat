@@ -63,4 +63,6 @@ docs/                Setup, Datenschutz, lokale Modelle
 
 Code unter MIT-Lizenz, siehe [LICENSE](LICENSE). Namen, Logos und Icons sind davon ausgenommen, siehe [TRADEMARKS.md](TRADEMARKS.md).
 
+Die **BlitztextMac**-App basiert ursprünglich auf der Blitztext-App von **Blackboat** ([blackboat.com](https://www.blackboat.com/)) — Originalprojekt: [github.com/cmagnussen/blitztext-app](https://github.com/cmagnussen/blitztext-app).
+
 > Hinweis: Dieses Repository ist privat. Sollte es irgendwann veröffentlicht werden, vorher die Doku auf den Public-Kontext prüfen (Support-/Security-Prozesse, Branch-Schutz, Secret-Scanning).
