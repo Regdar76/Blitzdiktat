@@ -113,8 +113,9 @@ class HelpWindow(ctk.CTkToplevel):
         self._hotkey_row(scroll, hk_p, "Aufnahme → Transkription → strukturiertes Protokoll")
         self._text(scroll,
             "Nimmt eine Besprechung auf — oder importiert eine externe Audio- bzw. Textdatei — "
-            "und erstellt daraus ein strukturiertes Markdown-Protokoll mit Tagesordnungspunkten, "
-            "Entscheidungen und offenen Aufgaben. Wird zusätzlich als PDF gespeichert.")
+            "und erstellt daraus ein strukturiertes Markdown-Protokoll: einleitende Zusammenfassung "
+            "(auch für Außenstehende verständlich), besprochene Punkte, Entscheidungen, offene Aufgaben "
+            "und — falls genannt — der nächste Termin. Wird zusätzlich als PDF gespeichert.")
         self._bullet(scroll, "Aufnahme: Hotkey gedrückt halten → sprechen → loslassen")
         self._bullet(scroll, "Import: 📂-Button neben dem Protokoll-Button im Hauptfenster")
         self._bullet(
