@@ -43,3 +43,5 @@ Das Skript erzeugt das Xcode-Projekt aus [project.yml](project.yml) und baut `Bl
 ## Lizenz
 
 MIT — wie das Hauptprojekt, siehe [../LICENSE](../LICENSE).
+
+Diese App basiert ursprünglich auf der Blitztext-App von **Blackboat** ([blackboat.com](https://www.blackboat.com/)) — Originalprojekt: [github.com/cmagnussen/blitztext-app](https://github.com/cmagnussen/blitztext-app).
