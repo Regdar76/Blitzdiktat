@@ -6,7 +6,7 @@
 ; ============================================================================
 
 #define AppName      "Blitzdiktat"
-#define AppVersion   "2.1.3"
+#define AppVersion   "2.1.4"
 #define AppPublisher "Thorben Meier"
 #define AppURL       "https://github.com/Regdar76/Blitzdiktat"
 #define AppExeName   "Blitzdiktat.exe"
@@ -67,7 +67,7 @@ Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cr
 
 ; Whisper-Small-Modell vorab einbündeln (in AppData des Nutzers ablegen)
 Source: "dist\whisper_models\*"; DestDir: "{userappdata}\Blitzdiktat\whisper_models"; \
-    Flags: ignoreversion recursesubdirs createallsubdirs; Check: WhisperModelExists
+    Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist; Check: WhisperModelExists
 
 [Icons]
 ; Startmenü
