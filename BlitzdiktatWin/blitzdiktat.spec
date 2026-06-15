@@ -164,7 +164,10 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    # Nicht benötigte, große Pakete ausschließen
+    # Nicht benötigte, große Pakete ausschließen.
+    # WICHTIG: pkg_resources._vendor NICHT ausschließen — aktuelles setuptools
+    # lädt daraus zur Laufzeit jaraco.text; sonst stürzt die App beim Start ab
+    # ("The 'jaraco.text' package is required").
     excludes=[
         "matplotlib",
         "scipy",
@@ -173,7 +176,6 @@ a = Analysis(
         "jupyter",
         "notebook",
         "pytest",
-        "pkg_resources._vendor",
     ],
     noarchive=False,
 )
