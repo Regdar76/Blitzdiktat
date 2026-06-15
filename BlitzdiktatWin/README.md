@@ -16,7 +16,7 @@ Alle Tastenkürzel sind in den Einstellungen frei konfigurierbar.
 
 ### Blitzdiktat Protokoll
 
-Nimmt eine Besprechung, ein Meeting oder eine Baubesprechung auf und erstellt daraus automatisch ein strukturiertes Protokoll auf Deutsch — egal in welcher Sprache gesprochen wurde. Das Protokoll enthält Datum, Thema, Teilnehmer, besprochene Punkte, Entscheidungen und eine Aufgabentabelle mit Verantwortlichen und Deadlines (soweit aus dem Inhalt erkennbar). Das Ergebnis wird in das zuletzt aktive Fenster eingefügt und zusätzlich als `.pdf` gespeichert.
+Nimmt eine Besprechung, ein Meeting oder eine Baubesprechung auf und erstellt daraus automatisch ein strukturiertes Protokoll auf Deutsch — egal in welcher Sprache gesprochen wurde. Das Protokoll beginnt mit einer Zusammenfassung, die auch Außenstehende sofort verstehen, und enthält darunter Datum, Thema, Teilnehmer, besprochene Punkte, Entscheidungen, offene Aufgaben mit Verantwortlichen und Deadlines sowie — falls im Gespräch genannt — den nächsten Termin (soweit aus dem Inhalt erkennbar). Das Ergebnis wird in das zuletzt aktive Fenster eingefügt und zusätzlich als `.pdf` gespeichert.
 
 ## Voraussetzungen
 
