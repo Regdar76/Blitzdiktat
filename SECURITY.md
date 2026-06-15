@@ -1,5 +1,7 @@
 # Sicherheitsnotizen
 
+> 🌐 **Deutsch** · [English](SECURITY.en.md)
+
 Privates Projekt — es gibt keinen öffentlichen Meldeprozess. Auffälligkeiten direkt als Issue im (privaten) Repository festhalten oder lokal fixen. Niemals API-Keys, Tokens, private Aufnahmen oder vertrauliche Transkripte in Issues, Commits oder Logs ablegen.
 
 ## Wo sensible Daten liegen

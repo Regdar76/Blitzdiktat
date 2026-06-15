@@ -1,5 +1,7 @@
 # Entwicklung
 
+> 🌐 **Deutsch** · [English](CONTRIBUTING.en.md)
+
 Privates Projekt — diese Datei sammelt die Konventionen und Build-Befehle für alle drei Apps.
 
 ## Bauen und Testen

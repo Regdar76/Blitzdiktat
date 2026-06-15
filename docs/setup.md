@@ -1,5 +1,7 @@
 # Setup (Windows)
 
+> 🌐 **Deutsch** · [English](setup.en.md)
+
 Einrichtung der Windows-App auf einem neuen Rechner. Für Android und macOS siehe das jeweilige README ([Android](../BlitzdiktatAndroid/README.md) · [macOS](../BlitztextMac/README.md)).
 
 ## 1. Voraussetzungen

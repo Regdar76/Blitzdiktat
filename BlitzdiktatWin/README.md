@@ -1,5 +1,7 @@
 # Blitzdiktat für Windows
 
+> 🌐 **Deutsch** · [English](README.en.md)
+
 Windows-Version von [Blitzdiktat](../README.md) — gleiche Idee, gleiche Workflows, native Windows-Erfahrung über das System-Tray.
 
 ## Was es macht

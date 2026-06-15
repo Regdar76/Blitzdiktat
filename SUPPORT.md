@@ -1,5 +1,7 @@
 # Support
 
+> 🌐 **Deutsch** · [English](SUPPORT.en.md)
+
 Privates Projekt — es gibt keinen Support-Kanal und keine Garantien. GitHub Issues im (privaten) Repository dienen als eigener Aufgaben- und Fehler-Tracker.
 
 ## Selbsthilfe-Checkliste

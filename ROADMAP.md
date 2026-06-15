@@ -1,5 +1,7 @@
 # Roadmap
 
+> 🌐 **Deutsch** · [English](ROADMAP.en.md)
+
 Arbeitsliste für die Weiterentwicklung — keine Zusagen, nur Richtung.
 
 ## Aktueller Stand

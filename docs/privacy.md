@@ -1,5 +1,7 @@
 # Datenschutz-Notizen
 
+> 🌐 **Deutsch** · [English](privacy.en.md)
+
 Blitzdiktat hat auf keiner Plattform ein eigenes Backend. Bei Online-Workflows sendet das Gerät Daten direkt an OpenAI:
 
 - Audio bei der Online-Transkription (nur Windows, optional)
