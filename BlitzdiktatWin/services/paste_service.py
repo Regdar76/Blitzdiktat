@@ -43,11 +43,27 @@ _user32.SetClipboardData.restype  = ctypes.c_void_p
 # ── Win32 constants ────────────────────────────────────────────────────────
 _WM_PASTE        = 0x0302
 _SW_RESTORE      = 9
-_INPUT_KEYBOARD  = 1
-_KEYEVENTF_KEYUP = 0x0002
-_VK_CONTROL      = 0x11
-_VK_V            = 0x56
-_CF_UNICODETEXT  = 13
+_INPUT_KEYBOARD     = 1
+_KEYEVENTF_KEYUP    = 0x0002
+_KEYEVENTF_SCANCODE = 0x0008
+_MAPVK_VK_TO_VSC    = 0
+_VK_CONTROL         = 0x11
+_VK_V               = 0x56
+_CF_UNICODETEXT     = 13
+
+# Sentinel written into dwExtraInfo of our synthetic key events, so we can
+# tell them apart from real keystrokes if we ever need to.
+_INJECT_TAG = 0x424C_495A   # 'BLIZ'
+
+# Scan codes are resolved once at import. Modern WinUI/UWP targets (e.g. the
+# Windows 11 "Editor"/Notepad) evaluate Ctrl+V on the scan-code level; sending
+# only virtual-key codes makes them register the 'v' as a literal character
+# before the Ctrl state is seen — the accelerator misfires and a stray "v"
+# leaks into the text. Sending scan codes (KEYEVENTF_SCANCODE) fixes that.
+_user32.MapVirtualKeyW.restype  = ctypes.wintypes.UINT
+_user32.MapVirtualKeyW.argtypes = [ctypes.wintypes.UINT, ctypes.wintypes.UINT]
+_SCAN_CONTROL = _user32.MapVirtualKeyW(_VK_CONTROL, _MAPVK_VK_TO_VSC)
+_SCAN_V       = _user32.MapVirtualKeyW(_VK_V,       _MAPVK_VK_TO_VSC)
 
 # Window classes that respond reliably to WM_PASTE without needing focus
 _PASTE_MSG_CLASSES = frozenset({
@@ -332,10 +348,21 @@ class _INPUT(ctypes.Structure):
 
 
 def _send_input_ctrl_v() -> int:
+    # Drive the key events on the scan-code level (KEYEVENTF_SCANCODE) so that
+    # modern WinUI/UWP targets see the Ctrl modifier before the V key and fire
+    # the paste accelerator instead of typing a literal "v". wVk is kept set
+    # purely as documentation — when KEYEVENTF_SCANCODE is present Windows uses
+    # wScan and ignores wVk.
+    _DN = _KEYEVENTF_SCANCODE
+    _UP = _KEYEVENTF_SCANCODE | _KEYEVENTF_KEYUP
     seq = (_INPUT * 4)(
-        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(wVk=_VK_CONTROL)),
-        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(wVk=_VK_V)),
-        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(wVk=_VK_V,       dwFlags=_KEYEVENTF_KEYUP)),
-        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(wVk=_VK_CONTROL, dwFlags=_KEYEVENTF_KEYUP)),
+        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(
+            wVk=_VK_CONTROL, wScan=_SCAN_CONTROL, dwFlags=_DN, dwExtraInfo=_INJECT_TAG)),
+        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(
+            wVk=_VK_V,       wScan=_SCAN_V,       dwFlags=_DN, dwExtraInfo=_INJECT_TAG)),
+        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(
+            wVk=_VK_V,       wScan=_SCAN_V,       dwFlags=_UP, dwExtraInfo=_INJECT_TAG)),
+        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(
+            wVk=_VK_CONTROL, wScan=_SCAN_CONTROL, dwFlags=_UP, dwExtraInfo=_INJECT_TAG)),
     )
     return _user32.SendInput(4, seq, ctypes.sizeof(_INPUT))
