@@ -75,13 +75,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             activeWorkflow = type,
             statusText = "Aufnahme läuft … (zum Stoppen erneut tippen)",
         )
+        // Bereits finalisierte Segmente, damit die Live-Anzeige im Dauer-Modus
+        // beim Weitersprechen nach einer Pause nicht kurz auf das aktuelle
+        // Segment zurückspringt, sondern den ganzen bisherigen Text zeigt.
+        var accumulatedSoFar = ""
         engine.start(
             object : DictationEngine.Listener {
                 override fun onPartial(text: String) {
-                    _state.value = _state.value.copy(liveText = text)
+                    val live = if (accumulatedSoFar.isBlank()) text
+                               else "$accumulatedSoFar $text"
+                    _state.value = _state.value.copy(liveText = live)
                 }
 
                 override fun onSegment(segment: String, accumulated: String) {
+                    accumulatedSoFar = accumulated
                     _state.value = _state.value.copy(liveText = accumulated)
                 }
 
@@ -102,7 +109,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
                 override fun onRms(rms: Float) {}
             },
-            continuous = type == WorkflowType.PROTOKOLL,
+            // Immer im Dauer-Modus aufnehmen: bei einer Sprechpause lauscht die
+            // App weiter, statt automatisch zu stoppen. Beendet wird die Aufnahme
+            // nur manuell (erneutes Tippen) — gilt für alle Workflows, nicht nur
+            // fürs Protokoll.
+            continuous = true,
             language = AppSettings.dictationLanguage(ctx),
         )
     }
