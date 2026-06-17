@@ -10,6 +10,7 @@ import android.graphics.Typeface
 import android.inputmethodservice.InputMethodService
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
@@ -33,9 +34,9 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * Blitzdiktat-Tastatur: Mikro antippen, sprechen, Text landet direkt im
- * Eingabefeld der aktiven App — das Android-Pendant zum globalen Hotkey
- * der Windows-App.
+ * Blitzdiktat-Tastatur: Mikro gedrückt halten, sprechen, loslassen — der Text
+ * landet direkt im Eingabefeld der aktiven App. Push-to-Talk, das Android-
+ * Pendant zum gehaltenen globalen Hotkey der Windows-App.
  */
 class BlitzdiktatImeService : InputMethodService() {
 
@@ -119,7 +120,23 @@ class BlitzdiktatImeService : InputMethodService() {
             textSize = 26f
             setTextColor(Color.WHITE)
             setBackgroundColor(accentBlue)
-            setOnClickListener { toggleDictation() }
+            // Push-to-Talk: aufnehmen, solange der Button gehalten wird; beim
+            // Loslassen stoppen (wie der gehaltene Hotkey der Windows-App).
+            @Suppress("ClickableViewAccessibility")
+            setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        startDictation()
+                        true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        v.performClick()   // Barrierefreiheit
+                        stopDictation()
+                        true
+                    }
+                    else -> false
+                }
+            }
         }
         val micParams = LinearLayout.LayoutParams(0, dp(64), 2f).apply {
             leftMargin = dp(8); rightMargin = dp(8)
@@ -153,11 +170,14 @@ class BlitzdiktatImeService : InputMethodService() {
 
     // ──────────────────────────────────────────────────────────────────
 
-    private fun toggleDictation() {
-        if (engine.isActive) {
-            engine.stop()
-            return
-        }
+    /** Stoppt eine laufende Aufnahme (Loslassen des Mikro-Buttons). */
+    private fun stopDictation() {
+        if (engine.isActive) engine.stop()
+    }
+
+    /** Startet die Aufnahme (Mikro-Button gedrückt). Läuft bis stopDictation(). */
+    private fun startDictation() {
+        if (engine.isActive) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             status("Mikrofon-Berechtigung fehlt — bitte die Blitzdiktat-App einmal öffnen.")
             startActivity(Intent(this, MainActivity::class.java).apply {
@@ -171,7 +191,7 @@ class BlitzdiktatImeService : InputMethodService() {
         }
 
         micButton?.setBackgroundColor(accentRed)
-        status("Aufnahme läuft … (Mikro erneut antippen zum Stoppen)")
+        status("Aufnahme läuft … (Mikro loslassen zum Stoppen)")
 
         engine.start(
             object : DictationEngine.Listener {
@@ -211,7 +231,10 @@ class BlitzdiktatImeService : InputMethodService() {
 
                 override fun onRms(rms: Float) {}
             },
-            continuous = selectedWorkflow == WorkflowType.PROTOKOLL,
+            // Dauer-Modus: während der Button gehalten wird, lauscht die App
+            // auch über Sprechpausen hinweg weiter; Schluss ist erst beim
+            // Loslassen (stopDictation).
+            continuous = true,
             language = AppSettings.dictationLanguage(this),
         )
     }
