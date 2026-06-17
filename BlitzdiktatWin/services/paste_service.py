@@ -39,10 +39,18 @@ _kernel32.GlobalUnlock.argtypes  = [ctypes.c_void_p]
 # SetClipboardData second arg is HANDLE (pointer-sized) — must not default to c_int
 _user32.SetClipboardData.argtypes = [ctypes.wintypes.UINT, ctypes.c_void_p]
 _user32.SetClipboardData.restype  = ctypes.c_void_p
+# SendMessageW: HWND + WPARAM/LPARAM are pointer-sized — declare them so 64-bit
+# window handles are not truncated to c_int. (Note: ctypes only exposes the
+# *W/*A variants, never a bare "SendMessage".)
+_user32.SendMessageW.argtypes = [ctypes.c_size_t, ctypes.wintypes.UINT,
+                                 ctypes.c_size_t, ctypes.c_size_t]
+_user32.SendMessageW.restype  = ctypes.c_ssize_t
 
 # ── Win32 constants ────────────────────────────────────────────────────────
-_WM_PASTE        = 0x0302
-_SW_RESTORE      = 9
+_WM_PASTE         = 0x0302
+_WM_GETTEXTLENGTH = 0x000E
+_EM_REPLACESEL    = 0x00C2
+_SW_RESTORE       = 9
 _INPUT_KEYBOARD     = 1
 _KEYEVENTF_KEYUP    = 0x0002
 _KEYEVENTF_SCANCODE = 0x0008
@@ -55,21 +63,25 @@ _CF_UNICODETEXT     = 13
 # tell them apart from real keystrokes if we ever need to.
 _INJECT_TAG = 0x424C_495A   # 'BLIZ'
 
-# Scan codes are resolved once at import. Modern WinUI/UWP targets (e.g. the
-# Windows 11 "Editor"/Notepad) evaluate Ctrl+V on the scan-code level; sending
-# only virtual-key codes makes them register the 'v' as a literal character
-# before the Ctrl state is seen — the accelerator misfires and a stray "v"
-# leaks into the text. Sending scan codes (KEYEVENTF_SCANCODE) fixes that.
+# Scan codes resolved once at import; used for the synthetic Ctrl+V fallback.
 _user32.MapVirtualKeyW.restype  = ctypes.wintypes.UINT
 _user32.MapVirtualKeyW.argtypes = [ctypes.wintypes.UINT, ctypes.wintypes.UINT]
 _SCAN_CONTROL = _user32.MapVirtualKeyW(_VK_CONTROL, _MAPVK_VK_TO_VSC)
 _SCAN_V       = _user32.MapVirtualKeyW(_VK_V,       _MAPVK_VK_TO_VSC)
 
-# Window classes that respond reliably to WM_PASTE without needing focus
-_PASTE_MSG_CLASSES = frozenset({
+# Edit/RichEdit-family controls accept EM_REPLACESEL, which inserts text
+# straight into the control's buffer at the caret — no clipboard, no focus, no
+# paste accelerator. "richeditd2dpt" is the edit surface of the Windows 11
+# "Editor"/Notepad. (The modern Notepad receives WM_PASTE but treats it as a
+# no-op when sent from another process; EM_REPLACESEL writes the text directly.)
+_RICHEDIT_CLASSES = frozenset({
     "edit", "richedit", "richedit20w", "richedit20a",
-    "richedit50w", "scintilla",
+    "richedit50w", "richeditd2dpt",
 })
+# Scintilla (Notepad++) does not implement EM_REPLACESEL, but WM_PASTE works.
+_SCINTILLA_CLASSES = frozenset({"scintilla"})
+# Union: any control we can drive without simulating keystrokes.
+_PASTE_MSG_CLASSES = _RICHEDIT_CLASSES | _SCINTILLA_CLASSES
 
 # ── Debug logging ──────────────────────────────────────────────────────────
 # Opt-in: set BLITZDIKTAT_DEBUG=1 to log paste attempts to
@@ -179,19 +191,52 @@ def paste_to_window(hwnd: int, text: str) -> None:
     cls = _get_class_name(focused) if focused else ""
     _log(f"paste_to_window: focused_child={hex(focused)}, class={repr(cls)}")
 
-    # 3a. Standard Win32 edit control → WM_PASTE (no focus stealing required)
-    if focused and cls.lower() in _PASTE_MSG_CLASSES:
-        result = _user32.SendMessage(focused, _WM_PASTE, 0, 0)
-        _log(f"paste_to_window: WM_PASTE → result={result}")
+    lc = cls.lower() if focused else ""
+
+    # 3a. Edit/RichEdit-family (incl. Windows 11 Notepad) → EM_REPLACESEL inserts
+    #     the text directly into the control. Verified via a text-length delta;
+    #     if nothing was inserted we fall through to the keystroke path.
+    if focused and lc in _RICHEDIT_CLASSES:
+        if _insert_via_replacesel(focused, text):
+            _log("paste_to_window: EM_REPLACESEL OK")
+            return
+        _log("paste_to_window: EM_REPLACESEL had no effect → falling back to Ctrl+V")
+        _attach_focus_paste(hwnd)
         return
 
-    # 3b. Everything else (Word, Outlook, browsers, Electron, …)
+    # 3b. Scintilla (Notepad++) → WM_PASTE (it does not implement EM_REPLACESEL).
+    if focused and lc in _SCINTILLA_CLASSES:
+        result = _user32.SendMessageW(focused, _WM_PASTE, 0, 0)
+        _log(f"paste_to_window: WM_PASTE (scintilla) → result={result}")
+        return
+
+    # 3c. Everything else (Word, Outlook, browsers, Electron …) → synthetic Ctrl+V.
     _log("paste_to_window: falling back to _attach_focus_paste")
     _attach_focus_paste(hwnd)
 
 
 def copy_to_clipboard(text: str) -> None:
     _write_clipboard(text)
+
+
+def _insert_via_replacesel(hctrl: int, text: str) -> bool:
+    """
+    Insert *text* into an Edit/RichEdit control at the caret using
+    EM_REPLACESEL.  Returns True if the control's text length actually grew,
+    so the caller can fall back to a keystroke paste when it didn't.
+
+    EM_REPLACESEL is one of the messages USER32 marshals across process (and
+    bitness) boundaries, so the LPARAM string pointer is delivered safely.
+    wParam=1 keeps the operation on the control's undo stack.
+    """
+    before = int(_user32.SendMessageW(hctrl, _WM_GETTEXTLENGTH, 0, 0))
+    buf = ctypes.create_unicode_buffer(text)
+    _user32.SendMessageW(hctrl, _EM_REPLACESEL, 1,
+                         ctypes.cast(buf, ctypes.c_void_p).value)
+    after = int(_user32.SendMessageW(hctrl, _WM_GETTEXTLENGTH, 0, 0))
+    _log(f"_insert_via_replacesel: text_len={len(text)}, "
+         f"control_len {before} → {after}")
+    return after > before
 
 
 # ── Internals ──────────────────────────────────────────────────────────────
@@ -348,21 +393,21 @@ class _INPUT(ctypes.Structure):
 
 
 def _send_input_ctrl_v() -> int:
-    # Drive the key events on the scan-code level (KEYEVENTF_SCANCODE) so that
-    # modern WinUI/UWP targets see the Ctrl modifier before the V key and fire
-    # the paste accelerator instead of typing a literal "v". wVk is kept set
-    # purely as documentation — when KEYEVENTF_SCANCODE is present Windows uses
-    # wScan and ignores wVk.
-    _DN = _KEYEVENTF_SCANCODE
-    _UP = _KEYEVENTF_SCANCODE | _KEYEVENTF_KEYUP
-    seq = (_INPUT * 4)(
-        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(
-            wVk=_VK_CONTROL, wScan=_SCAN_CONTROL, dwFlags=_DN, dwExtraInfo=_INJECT_TAG)),
-        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(
-            wVk=_VK_V,       wScan=_SCAN_V,       dwFlags=_DN, dwExtraInfo=_INJECT_TAG)),
-        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(
-            wVk=_VK_V,       wScan=_SCAN_V,       dwFlags=_UP, dwExtraInfo=_INJECT_TAG)),
-        _INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(
-            wVk=_VK_CONTROL, wScan=_SCAN_CONTROL, dwFlags=_UP, dwExtraInfo=_INJECT_TAG)),
-    )
-    return _user32.SendInput(4, seq, ctypes.sizeof(_INPUT))
+    # Scan-code level events (KEYEVENTF_SCANCODE); wVk is documentation only —
+    # when KEYEVENTF_SCANCODE is set Windows uses wScan. The four events are
+    # sent as *separate* SendInput calls with short pauses so the target's
+    # input thread registers Ctrl as down before V arrives (single-burst
+    # delivery can make some apps see V without the modifier). This fallback is
+    # only reached for targets without a directly drivable edit control.
+    def _key(scan: int, key_up: bool) -> int:
+        flags = _KEYEVENTF_SCANCODE | (_KEYEVENTF_KEYUP if key_up else 0)
+        evt = (_INPUT * 1)(_INPUT(type=_INPUT_KEYBOARD, ki=_KEYBDINPUT(
+            wScan=scan, dwFlags=flags, dwExtraInfo=_INJECT_TAG)))
+        return _user32.SendInput(1, evt, ctypes.sizeof(_INPUT))
+
+    n = 0
+    n += _key(_SCAN_CONTROL, False); time.sleep(0.03)
+    n += _key(_SCAN_V,       False); time.sleep(0.02)
+    n += _key(_SCAN_V,       True);  time.sleep(0.02)
+    n += _key(_SCAN_CONTROL, True)
+    return n
