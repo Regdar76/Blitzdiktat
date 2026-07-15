@@ -10,5 +10,3 @@ gradlew text eol=lf
 *.icns binary
 *.jar binary
 *.ico binary
-BlitzdiktatWin/Blitzdiktat-Windows-Setup-*.exe filter=lfs diff=lfs merge=lfs -text
-BlitzdiktatAndroid/Blitzdiktat-Android-*.apk filter=lfs diff=lfs merge=lfs -text

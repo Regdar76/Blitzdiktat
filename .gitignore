@@ -4,8 +4,6 @@ BlitzdiktatAndroid/.kotlin/
 BlitzdiktatAndroid/local.properties
 BlitzdiktatAndroid/**/build/
 *.apk
-# Ausnahme: veröffentlichte Release-APK (per Git LFS)
-!BlitzdiktatAndroid/Blitzdiktat-Android-0.3.1.apk
 
 # Android signing — niemals einchecken
 BlitzdiktatAndroid/key.properties
@@ -21,6 +19,9 @@ venv/
 BlitzdiktatWin/packages/
 BlitzdiktatWin/build/
 BlitzdiktatWin/dist/
+# Installer nie einchecken — Verteilung über GitHub Releases
+BlitzdiktatWin/Blitzdiktat-Windows-Setup-*.exe
+BlitzdiktatWin/Setup-Blitzdiktat-*.exe
 *.egg-info/
 
 # Xcode
