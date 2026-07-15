@@ -6,7 +6,9 @@ Working list for further development — no commitments, just direction.
 
 ## Current state
 
-| | Windows 2.1.3 | Android 0.3.0 | macOS (Blitztext) |
+Current versions: see [Releases](https://github.com/Regdar76/Blitzdiktat/releases).
+
+| | Windows | Android | macOS (Blitztext) |
 |---|---|---|---|
 | Local dictation | ✅ faster-whisper | ✅ device recognition | ✅ WhisperKit |
 | LLM workflows (+, $%&!, :)) | ✅ | ✅ | ✅ |
@@ -46,4 +48,3 @@ Working list for further development — no commitments, just direction.
 
 - Hosted backend, accounts, sync, or teams
 - Embedded API key in distributed apps
-- Publishing the repository (stays private)

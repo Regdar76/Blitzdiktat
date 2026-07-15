@@ -6,7 +6,9 @@ Arbeitsliste für die Weiterentwicklung — keine Zusagen, nur Richtung.
 
 ## Aktueller Stand
 
-| | Windows 2.1.3 | Android 0.3.0 | macOS (Blitztext) |
+Aktuelle Versionen: siehe [Releases](https://github.com/Regdar76/Blitzdiktat/releases).
+
+| | Windows | Android | macOS (Blitztext) |
 |---|---|---|---|
 | Diktat lokal | ✅ faster-whisper | ✅ Geräte-Erkennung | ✅ WhisperKit |
 | LLM-Workflows (+, $%&!, :)) | ✅ | ✅ | ✅ |
@@ -46,4 +48,3 @@ Arbeitsliste für die Weiterentwicklung — keine Zusagen, nur Richtung.
 
 - Gehostetes Backend, Accounts, Sync oder Teams
 - Eingebetteter API-Key in verteilten Apps
-- Veröffentlichung des Repositories (bleibt privat)

@@ -1,5 +1,7 @@
 # ⚡ Blitzdiktat
 
+[![CI](https://github.com/Regdar76/Blitzdiktat/actions/workflows/ci.yml/badge.svg)](https://github.com/Regdar76/Blitzdiktat/actions/workflows/ci.yml)
+
 > 🌐 **Deutsch** · [English](README.en.md)
 
 Sprache rein. Text raus. — Diktier- und Schreibassistent für **Windows, Android und macOS**.
@@ -7,6 +9,16 @@ Sprache rein. Text raus. — Diktier- und Schreibassistent für **Windows, Andro
 Blitzdiktat nimmt Sprache auf, transkribiert sie (lokal, wo immer möglich), verbessert den Text auf Wunsch per LLM und liefert das Ergebnis dorthin, wo es gebraucht wird: ins aktive Fenster, ins Eingabefeld oder in die Zwischenablage.
 
 > Privates Projekt von Thorben Meier. Kein gehostetes Backend, kein eingebetteter API-Key — alle LLM-Workflows laufen mit eigenem OpenAI-Key (BYO-Key).
+
+![Blitzdiktat für Windows — lokales Diktat](docs/screenshots/local-mode.png)
+
+## 📥 Download
+
+Fertige Pakete gibt es auf der [**Releases-Seite**](https://github.com/Regdar76/Blitzdiktat/releases):
+
+- **Windows:** `Setup-Blitzdiktat-<version>.exe` — Installer mit allen Abhängigkeiten inkl. Whisper-Modell, kein Python nötig (Windows 10/11)
+- **Android:** `Blitzdiktat-Android-<version>.apk` — signierte APK (Android 8.0+)
+- **macOS:** aktuell Build aus dem Quellcode — siehe [BlitztextMac/README.md](BlitztextMac/README.md)
 
 ## Die Workflows
 

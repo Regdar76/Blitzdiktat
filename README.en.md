@@ -1,5 +1,7 @@
 # ⚡ Blitzdiktat
 
+[![CI](https://github.com/Regdar76/Blitzdiktat/actions/workflows/ci.yml/badge.svg)](https://github.com/Regdar76/Blitzdiktat/actions/workflows/ci.yml)
+
 > 🌐 [Deutsch](README.md) · **English**
 
 Speech in. Text out. — Dictation and writing assistant for **Windows, Android and macOS**.
@@ -7,6 +9,16 @@ Speech in. Text out. — Dictation and writing assistant for **Windows, Android 
 Blitzdiktat records speech, transcribes it (locally wherever possible), refines the text on demand via an LLM, and delivers the result wherever it's needed: into the active window, into the input field, or onto the clipboard.
 
 > Private project by Thorben Meier. No hosted backend, no embedded API key — all LLM workflows run with your own OpenAI key (BYO key).
+
+![Blitzdiktat for Windows — local dictation](docs/screenshots/local-mode.png)
+
+## 📥 Download
+
+Ready-made packages are available on the [**Releases page**](https://github.com/Regdar76/Blitzdiktat/releases):
+
+- **Windows:** `Setup-Blitzdiktat-<version>.exe` — installer with all dependencies including the Whisper model, no Python required (Windows 10/11)
+- **Android:** `Blitzdiktat-Android-<version>.apk` — signed APK (Android 8.0+)
+- **macOS:** currently built from source — see [BlitztextMac/README.md](BlitztextMac/README.en.md)
 
 ## The Workflows
 
