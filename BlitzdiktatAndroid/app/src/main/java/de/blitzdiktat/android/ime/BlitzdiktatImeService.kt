@@ -8,10 +8,12 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.inputmethodservice.InputMethodService
+import android.os.Build
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.HorizontalScrollView
@@ -26,8 +28,10 @@ import de.blitzdiktat.android.llm.OpenAiClient
 import de.blitzdiktat.android.pdf.ProtocolPdf
 import de.blitzdiktat.android.speech.DictationEngine
 import de.blitzdiktat.android.workflows.WorkflowType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -48,6 +52,14 @@ class BlitzdiktatImeService : InputMethodService() {
     private var statusView: TextView? = null
     private var chipViews: MutableMap<WorkflowType, TextView> = mutableMapOf()
 
+    // Laufender LLM-Auftrag und Zähler der Eingabesitzung. Der OpenAI-Call
+    // dauert Sekunden — wechselt der Nutzer währenddessen App oder Feld, darf
+    // das Ergebnis nicht mehr über currentInputConnection committet werden
+    // (es landet sonst im falschen Eingabefeld, schlimmstenfalls in einer
+    // fremden App). Jeder Sitzungswechsel erhöht inputSession.
+    private var llmJob: Job? = null
+    private var inputSession = 0
+
     private val bgColor = Color.parseColor("#1E293B")
     private val accentRed = Color.parseColor("#DC2626")
     private val accentBlue = Color.parseColor("#3B82F6")
@@ -61,6 +73,23 @@ class BlitzdiktatImeService : InputMethodService() {
         engine.cancel()
         scope.cancel()
         super.onDestroy()
+    }
+
+    override fun onStartInputView(editorInfo: EditorInfo?, restarting: Boolean) {
+        super.onStartInputView(editorInfo, restarting)
+        inputSession++
+    }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        // Tastatur verschwindet bzw. Feld verliert den Fokus: Aufnahme und
+        // LLM-Verarbeitung gehören zur alten Sitzung — abbrechen, damit kein
+        // Ergebnis zeitversetzt in ein anderes Feld geschrieben wird.
+        inputSession++
+        llmJob?.cancel()
+        llmJob = null
+        if (engine.isActive) engine.cancel()
+        micButton?.setBackgroundColor(accentBlue)
+        super.onFinishInputView(finishingInput)
     }
 
     override fun onCreateInputView(): View {
@@ -242,13 +271,22 @@ class BlitzdiktatImeService : InputMethodService() {
     private fun runLlm(text: String) {
         status("Wird verarbeitet …")
         val workflow = selectedWorkflow
-        scope.launch {
+        val session = inputSession
+        llmJob = scope.launch {
             try {
                 val result = OpenAiClient.runWorkflow(this@BlitzdiktatImeService, workflow, text)
-                commit(result)
-                status("Fertig.")
+                // Immer speichern — auch wenn nicht mehr committet werden darf,
+                // ist das Ergebnis über den Verlauf erreichbar.
                 persist(workflow, result)
                 learnVocabulary(result)
+                if (session == inputSession) {
+                    commit(result)
+                    status("Fertig.")
+                } else {
+                    status("Eingabefeld gewechselt — Ergebnis liegt im Verlauf.")
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: LlmException) {
                 status(e.message ?: "Fehler.")
             } catch (e: Exception) {
@@ -295,7 +333,13 @@ class BlitzdiktatImeService : InputMethodService() {
     }
 
     private fun switchToPreviousKeyboard() {
-        val switched = switchToPreviousInputMethod()
+        // switchToPreviousInputMethod() existiert erst ab API 28 — auf
+        // Android 8.x (minSdk 26) crasht der Aufruf mit NoSuchMethodError.
+        val switched = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            switchToPreviousInputMethod()
+        } else {
+            false
+        }
         if (!switched) {
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.showInputMethodPicker()
