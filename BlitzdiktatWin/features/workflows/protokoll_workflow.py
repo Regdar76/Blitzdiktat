@@ -1,15 +1,12 @@
 # Copyright (c) 2026 Thorben Meier. MIT License.
-import asyncio
 import os
 import threading
 
-from services.audio_recorder import AudioRecorder
 from services.transcription_service import transcribe_sync
 from services import llm_service
 from services.error_handler import friendly_message
-from .base_workflow import BaseWorkflow, WorkflowPhase, WorkflowType
-
-MIN_DURATION = 0.4
+from .base_workflow import WorkflowPhase, WorkflowType
+from .recording_workflow import RecordingWorkflow
 
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".flac", ".aac", ".wma"}
 TEXT_EXTENSIONS  = {".txt", ".md"}
@@ -29,6 +26,7 @@ def read_text_file(path: str) -> str:
             continue
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         return f.read()
+
 
 PROTOKOLL_SYSTEM_PROMPT = (
     "Du bist ein präziser Protokollassistent für Besprechungen, Meetings und Baubesprechungen.\n\n"
@@ -87,7 +85,15 @@ PROTOKOLL_SYSTEM_PROMPT = (
 )
 
 
-class ProtokollWorkflow(BaseWorkflow):
+class ProtokollWorkflow(RecordingWorkflow):
+    """Blitzdiktat Protokoll: Besprechung → strukturiertes Protokoll (+ PDF).
+
+    Zusätzlich zum Aufnahme-Weg der Basisklasse gibt es den Datei-Import
+    (Audio- oder Textdatei) über import_file().
+    """
+
+    PROCESS_STATUS = "Protokoll wird erstellt ..."
+
     def __init__(
         self,
         settings,
@@ -97,38 +103,25 @@ class ProtokollWorkflow(BaseWorkflow):
         device: int | None = None,
         custom_terms: list[str] | None = None,
     ):
-        super().__init__(WorkflowType.PROTOKOLL)
-        self._settings = settings
-        self._language = language
-        self._backend = backend
-        self._local_model = local_model
-        self._custom_terms = custom_terms or []
-        self._recorder = AudioRecorder(device=device)
+        super().__init__(
+            WorkflowType.PROTOKOLL,
+            settings=settings,
+            language=language,
+            backend=backend,
+            local_model=local_model,
+            device=device,
+            custom_terms=custom_terms or [],
+        )
 
-    def start(self) -> None:
-        self._set_phase(WorkflowPhase.RECORDING, "Aufnahme läuft ...")
-        self._recorder.start_recording()
-        if self._recorder.error_message:
-            self._set_phase(WorkflowPhase.ERROR, error=self._recorder.error_message)
+    def _process(self, raw: str) -> str:
+        system_prompt = (
+            getattr(self._settings, "system_prompt", "") or PROTOKOLL_SYSTEM_PROMPT
+        )
+        return self._run_async(llm_service.protokoll(raw, system_prompt))
 
-    def stop(self) -> None:
-        if not self._recorder.is_recording:
-            return
-        self._recorder.stop_recording()
-
-        if self._recorder.last_duration < MIN_DURATION:
-            self._recorder.discard_recording()
-            self._set_phase(WorkflowPhase.ERROR, error="Keine Aufnahme erkannt.")
-            return
-
-        self._set_phase(WorkflowPhase.PROCESSING, "Wird vorbereitet ...")
-        threading.Thread(target=self._run, daemon=True).start()
-
-    def reset(self) -> None:
-        if self._recorder.is_recording:
-            self._recorder.stop_recording()
-        self._recorder.discard_recording()
-        self._set_phase(WorkflowPhase.IDLE)
+    # ------------------------------------------------------------------
+    # Datei-Import (nur Protokoll)
+    # ------------------------------------------------------------------
 
     def import_file(self, path: str) -> None:
         self._set_phase(WorkflowPhase.PROCESSING, "Wird vorbereitet ...")
@@ -145,7 +138,7 @@ class ProtokollWorkflow(BaseWorkflow):
                 )
                 self._set_phase(WorkflowPhase.PROCESSING, status)
                 raw, hint = transcribe_sync(
-                    path, self._language, self._custom_terms,
+                    path, self._language, self._transcribe_terms(),
                     self._backend, self._local_model,
                 )
             elif ext in TEXT_EXTENSIONS:
@@ -158,56 +151,11 @@ class ProtokollWorkflow(BaseWorkflow):
                 self._set_phase(WorkflowPhase.ERROR, error=f"Nicht unterstütztes Dateiformat: {ext}")
                 return
 
-            self._set_phase(WorkflowPhase.PROCESSING, "Protokoll wird erstellt ...")
-            system_prompt = (
-                getattr(self._settings, "system_prompt", "") or PROTOKOLL_SYSTEM_PROMPT
-            )
-            loop = asyncio.new_event_loop()
-            protokoll = loop.run_until_complete(
-                llm_service.protokoll(raw, system_prompt)
-            )
-            loop.close()
+            self._set_phase(WorkflowPhase.PROCESSING, self.PROCESS_STATUS)
+            protokoll = self._process(raw)
 
             done_status = f"Fertig. ({hint})" if hint else "Fertig."
             self._set_phase(WorkflowPhase.DONE, status=done_status)
             self._emit_output(protokoll)
         except Exception as e:
             self._set_phase(WorkflowPhase.ERROR, error=friendly_message(e))
-
-    @property
-    def audio_level(self) -> float:
-        return self._recorder.audio_level
-
-    def _run(self) -> None:
-        path = self._recorder.recording_path
-        if not path:
-            self._set_phase(WorkflowPhase.ERROR, error="Keine Aufnahmedatei vorhanden.")
-            return
-        try:
-            status = (
-                f"Wird lokal transkribiert ({self._local_model}) ..."
-                if self._backend == "local"
-                else "Wird transkribiert ..."
-            )
-            self._set_phase(WorkflowPhase.PROCESSING, status)
-            raw, hint = transcribe_sync(
-                path, self._language, self._custom_terms,
-                self._backend, self._local_model,
-            )
-
-            self._set_phase(WorkflowPhase.PROCESSING, "Protokoll wird erstellt ...")
-            system_prompt = (
-                getattr(self._settings, "system_prompt", "") or PROTOKOLL_SYSTEM_PROMPT
-            )
-            loop = asyncio.new_event_loop()
-            protokoll = loop.run_until_complete(
-                llm_service.protokoll(raw, system_prompt)
-            )
-            loop.close()
-
-            done_status = f"Fertig. ({hint})" if hint else "Fertig."
-            self._set_phase(WorkflowPhase.DONE, status=done_status)
-            self._emit_output(protokoll)
-        except Exception as e:
-            self._set_phase(WorkflowPhase.ERROR, error=friendly_message(e))
-            self._recorder.discard_recording()
