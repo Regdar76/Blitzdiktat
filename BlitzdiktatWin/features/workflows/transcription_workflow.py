@@ -74,8 +74,7 @@ class TranscriptionWorkflow(BaseWorkflow):
             text = apply_voice_commands(text)
             done_status = f"Fertig. ({hint})" if hint else "Fertig."
             self._set_phase(WorkflowPhase.DONE, status=done_status)
-            if self.on_output:
-                self.on_output(text)
+            self._emit_output(text)
         except Exception as e:
             self._set_phase(WorkflowPhase.ERROR, error=friendly_message(e))
             self._recorder.discard_recording()   # nur bei Fehler löschen

@@ -6,6 +6,7 @@ Settings are persisted to %APPDATA%\\Blitzdiktat\\settings.json.
 
 import json
 import os
+import queue
 import threading
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Any
@@ -195,6 +196,15 @@ class AppState:
         self._subscribers: list[AppStateCallback] = []
         self._target_hwnd: int = 0
         self._lock = threading.Lock()
+        # Hotkey-Events (Press/Release) laufen über eine Queue durch genau
+        # einen Worker-Thread. Das garantiert, dass ein Release erst nach dem
+        # vollständigen Start verarbeitet wird — ein kurzer Hotkey-Tipp konnte
+        # sonst die noch startende Aufnahme verfehlen und sie lief endlos.
+        self._hotkey_events: queue.Queue = queue.Queue()
+        threading.Thread(
+            target=self._hotkey_event_worker, daemon=True,
+            name="hotkey-events",
+        ).start()
 
     # ------------------------------------------------------------------
     # Subscription
@@ -301,7 +311,10 @@ class AppState:
             return
 
         workflow.on_state_change = self._on_workflow_state
-        workflow.on_output = self._on_workflow_output
+        # Workflow-Identität mitgeben: der Callback prüft damit, ob der
+        # Output noch vom aktiven Workflow stammt (und nutzt dessen Typ,
+        # statt active_workflow zurückzulesen).
+        workflow.on_output = lambda text, wf=workflow: self._on_workflow_output(wf, text)
 
         with self._lock:
             self.active_workflow = workflow
@@ -332,7 +345,10 @@ class AppState:
             custom_terms=all_terms,
         )
         workflow.on_state_change = self._on_workflow_state
-        workflow.on_output = self._on_workflow_output
+        # Workflow-Identität mitgeben: der Callback prüft damit, ob der
+        # Output noch vom aktiven Workflow stammt (und nutzt dessen Typ,
+        # statt active_workflow zurückzulesen).
+        workflow.on_output = lambda text, wf=workflow: self._on_workflow_output(wf, text)
         with self._lock:
             self.active_workflow = workflow
         workflow.import_file(path)
@@ -377,14 +393,30 @@ class AppState:
         _bind(s.hotkey_protokoll, WorkflowType.PROTOKOLL)
 
     def _hotkey_press(self, wtype: WorkflowType) -> None:
-        self.capture_target_window()
-        self.start_workflow(wtype)
+        # Zielfenster sofort erfassen (schneller Win32-Call), damit der
+        # Fokus-Zustand zum Zeitpunkt des Tastendrucks gilt — die eigentliche
+        # Arbeit übernimmt der serielle Worker.
+        hwnd = paste_service.get_foreground_hwnd()
+        self._hotkey_events.put(("press", wtype, hwnd))
 
     def _hotkey_release(self, wtype: WorkflowType) -> None:
-        with self._lock:
-            wf = self.active_workflow
-        if wf and wf.workflow_type == wtype and wf.is_recording:
-            wf.stop()
+        self._hotkey_events.put(("release", wtype, 0))
+
+    def _hotkey_event_worker(self) -> None:
+        while True:
+            action, wtype, hwnd = self._hotkey_events.get()
+            try:
+                if action == "press":
+                    with self._lock:
+                        self._target_hwnd = hwnd
+                    self.start_workflow(wtype)
+                else:
+                    with self._lock:
+                        wf = self.active_workflow
+                    if wf and wf.workflow_type == wtype and wf.is_recording:
+                        wf.stop()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Workflow callbacks
@@ -393,12 +425,15 @@ class AppState:
     def _on_workflow_state(self, state: WorkflowState) -> None:
         self._notify()
 
-    def _on_workflow_output(self, text: str) -> None:
+    def _on_workflow_output(self, wf: BaseWorkflow, text: str) -> None:
         with self._lock:
             hwnd = self._target_hwnd
-            wf = self.active_workflow
-        workflow_name = wf.workflow_type.display_name if wf else ""
-        wf_type = wf.workflow_type if wf else None
+            if wf is not self.active_workflow:
+                # Output eines bereits ersetzten/abgebrochenen Workflows —
+                # nicht einfügen, nicht speichern.
+                return
+        workflow_name = wf.workflow_type.display_name
+        wf_type = wf.workflow_type
 
         threading.Thread(
             target=paste_service.paste_to_window,
@@ -445,5 +480,9 @@ class AppState:
     def _stop_active(self) -> None:
         with self._lock:
             wf = self.active_workflow
+            self.active_workflow = None
         if wf:
+            # Erst abkoppeln (kein Output/State mehr), dann zurücksetzen —
+            # ein evtl. noch laufender Verarbeitungs-Thread läuft ins Leere.
+            wf.cancel()
             wf.reset()
