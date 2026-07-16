@@ -32,23 +32,47 @@ object AppSettings {
     @Volatile
     private var prefs: SharedPreferences? = null
 
+    private fun createPrefs(appContext: Context): SharedPreferences {
+        val masterKey = MasterKey.Builder(appContext)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return EncryptedSharedPreferences.create(
+            appContext,
+            PREFS,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    }
+
     private fun prefs(context: Context): SharedPreferences {
         prefs?.let { return it }
         synchronized(this) {
             prefs?.let { return it }
-            val masterKey = MasterKey.Builder(context.applicationContext)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-            val created = EncryptedSharedPreferences.create(
-                context.applicationContext,
-                PREFS,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-            )
+            val appContext = context.applicationContext
+            val created = try {
+                createPrefs(appContext)
+            } catch (e: Exception) {
+                // Korrupte Prefs (z. B. nach Backup/Restore oder Keystore-
+                // Reset) machten jeden Zugriff zum Crash. Datei verwerfen
+                // und neu anlegen — der API-Key muss dann neu hinterlegt
+                // werden, aber die App bleibt benutzbar.
+                appContext.deleteSharedPreferences(PREFS)
+                createPrefs(appContext)
+            }
             prefs = created
             return created
         }
+    }
+
+    /**
+     * Initialisiert die EncryptedSharedPreferences vorab (Keystore + Datei-
+     * I/O, auf manchen Geräten mehrere hundert ms). Vom App-/Service-Start
+     * aus auf Dispatchers.IO aufrufen, damit der erste Zugriff nicht auf
+     * dem Main-Thread passiert (Tastatur-Öffnen war sonst ANR-gefährdet).
+     */
+    fun prewarm(context: Context) {
+        runCatching { prefs(context) }
     }
 
     fun apiKey(context: Context): String =

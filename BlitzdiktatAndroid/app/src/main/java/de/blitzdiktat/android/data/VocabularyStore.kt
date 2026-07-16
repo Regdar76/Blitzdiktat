@@ -26,7 +26,14 @@ object VocabularyStore {
         }.getOrDefault(emptyList())
     }
 
-    /** Fügt neue Begriffe hinzu (dedupliziert, gekappt). Gibt die Anzahl neuer Begriffe zurück. */
+    /**
+     * Fügt neue Begriffe hinzu (dedupliziert, gekappt). Gibt die Anzahl neuer Begriffe zurück.
+     *
+     * @Synchronized: IME-Service und ViewModel lernen parallel auf
+     * Dispatchers.IO — ohne Lock verlor das Read-Modify-Write Begriffe
+     * (Lost Update).
+     */
+    @Synchronized
     fun addTerms(file: File, terms: List<String>): Int {
         if (terms.isEmpty()) return 0
         val existing = learnedTerms(file)
@@ -42,10 +49,12 @@ object VocabularyStore {
         return newTerms.size
     }
 
+    @Synchronized
     fun removeTerm(file: File, term: String) {
         write(file, learnedTerms(file).filterNot { it.equals(term, ignoreCase = true) })
     }
 
+    @Synchronized
     fun clear(file: File) {
         write(file, emptyList())
     }
