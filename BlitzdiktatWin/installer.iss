@@ -96,8 +96,9 @@ Filename: "taskkill.exe"; Parameters: "/f /im {#AppExeName}"; Flags: runhidden; 
 
 [UninstallDelete]
 ; Nutzerdaten im AppData-Ordner NICHT löschen (API-Keys bleiben erhalten)
-; Nur temporäre Audiodateien entfernen
-Type: filesandordirs; Name: "{userappdata}\Blitzdiktat\recordings"
+; Audioaufnahmen sind sensibel und werden immer entfernt — sie liegen unter
+; %LOCALAPPDATA%\Blitzdiktat\Audioaufnahmen (nicht {userappdata}\recordings)
+Type: filesandordirs; Name: "{localappdata}\Blitzdiktat\Audioaufnahmen"
 
 [Code]
 // ── Prüft ob das vorgebaute Whisper-Modell im Source-Verzeichnis vorhanden ist
@@ -116,25 +117,37 @@ begin
   Exec('taskkill.exe', '/f /im Blitzdiktat.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
-// ── Deinstallation: Nutzer fragen ob AppData-Ordner gelöscht werden soll ────
+// ── Deinstallation: Nutzer fragen ob alle App-Daten gelöscht werden sollen ──
+// Es gibt zwei Datenorte:
+//   {userappdata}\Blitzdiktat   – Einstellungen, Whisper-Modelle
+//   {localappdata}\Blitzdiktat  – Transkriptionen, Protokoll-PDFs
+//     (Audioaufnahmen darunter werden via [UninstallDelete] immer entfernt)
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  AppDataPath: String;
+  RoamingPath, LocalPath: String;
   Answer: Integer;
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    AppDataPath := ExpandConstant('{userappdata}\Blitzdiktat');
-    if DirExists(AppDataPath) then
+    RoamingPath := ExpandConstant('{userappdata}\Blitzdiktat');
+    LocalPath := ExpandConstant('{localappdata}\Blitzdiktat');
+    if DirExists(RoamingPath) or DirExists(LocalPath) then
     begin
       Answer := MsgBox(
-        'Sollen alle Blitzdiktat-Einstellungen und gespeicherten Whisper-Modelle ebenfalls gelöscht werden?' + #13#10 +
-        '(API-Keys, Einstellungen, heruntergeladene Modelle)' + #13#10#13#10 +
-        'Pfad: ' + AppDataPath,
+        'Sollen alle Blitzdiktat-Daten ebenfalls gelöscht werden?' + #13#10 +
+        '(Einstellungen, heruntergeladene Whisper-Modelle, Transkriptionen und Protokolle)' + #13#10#13#10 +
+        'Pfade:' + #13#10 +
+        RoamingPath + #13#10 +
+        LocalPath,
         mbConfirmation, MB_YESNO
       );
       if Answer = IDYES then
-        DelTree(AppDataPath, True, True, True);
+      begin
+        if DirExists(RoamingPath) then
+          DelTree(RoamingPath, True, True, True);
+        if DirExists(LocalPath) then
+          DelTree(LocalPath, True, True, True);
+      end;
     end;
   end;
 end;
