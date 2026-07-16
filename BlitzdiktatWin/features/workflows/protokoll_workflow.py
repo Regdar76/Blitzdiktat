@@ -14,6 +14,22 @@ MIN_DURATION = 0.4
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".flac", ".aac", ".wma"}
 TEXT_EXTENSIONS  = {".txt", ".md"}
 
+
+def read_text_file(path: str) -> str:
+    """Liest eine Textdatei tolerant: UTF-8 (inkl. BOM), dann cp1252.
+
+    Deutsche .txt-Dateien aus Notepad/Word sind häufig cp1252-kodiert —
+    striktes UTF-8 warf dafür einen UnicodeDecodeError.
+    """
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            with open(path, "r", encoding=enc) as f:
+                return f.read()
+        except UnicodeDecodeError:
+            continue
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        return f.read()
+
 PROTOKOLL_SYSTEM_PROMPT = (
     "Du bist ein präziser Protokollassistent für Besprechungen, Meetings und Baubesprechungen.\n\n"
     "Du erhältst eine gesprochene, unstrukturierte Aufnahme auf Deutsch oder einer anderen "
@@ -134,8 +150,7 @@ class ProtokollWorkflow(BaseWorkflow):
                 )
             elif ext in TEXT_EXTENSIONS:
                 hint = ""
-                with open(path, "r", encoding="utf-8") as f:
-                    raw = f.read().strip()
+                raw = read_text_file(path).strip()
                 if not raw:
                     self._set_phase(WorkflowPhase.ERROR, error="Datei ist leer.")
                     return

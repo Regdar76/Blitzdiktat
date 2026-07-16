@@ -61,14 +61,23 @@ def find_device_index(name: str) -> int | None:
 
 
 class AudioRecorder:
+    """Nimmt vom Mikrofon auf und schreibt direkt streamend in die WAV-Datei.
+
+    Früher wurden alle Frames im RAM gesammelt und erst beim Stoppen
+    zusammengefügt — eine Stunde Protokoll-Aufnahme brauchte so >500 MB
+    Spitzenspeicher. Jetzt hält der Recorder nur den aktuellen Block.
+    """
+
     def __init__(self, device: int | None = None):
         self._device = device
-        self._frames: list[np.ndarray] = []
         self._recording = False
         self._stream: sd.InputStream | None = None
         self._lock = threading.Lock()
         self._start_time: float | None = None
         self._recording_path: str | None = None
+        self._wave: wave.Wave_write | None = None
+        self._wave_path: str | None = None
+        self._frames_written = 0
         self.last_duration: float = 0.0
         self.audio_level: float = 0.0
         self.error_message: str | None = None
@@ -82,19 +91,30 @@ class AudioRecorder:
         return self._recording_path
 
     def start_recording(self) -> None:
+        ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        path = os.path.join(recordings_dir(), f"blitzdiktat_{ts}.wav")
+
         with self._lock:
-            self._frames = []
-            self._recording = True
             self._start_time = time.time()
             self._recording_path = None
+            self._frames_written = 0
             self.error_message = None
             self.audio_level = 0.0
+            try:
+                wf = wave.open(path, "wb")
+                wf.setnchannels(CHANNELS)
+                wf.setsampwidth(2)
+                wf.setframerate(SAMPLE_RATE)
+            except Exception as e:
+                self._recording = False
+                self.error_message = f"Aufnahmedatei konnte nicht angelegt werden: {e}"
+                return
+            self._wave = wf
+            self._wave_path = path
+            self._recording = True
 
         def _callback(indata, frames, time_info, status):
-            with self._lock:
-                if self._recording:
-                    self._frames.append(indata.copy())
-                    self.audio_level = float(np.sqrt(np.mean(indata ** 2)))
+            self._on_audio(indata, frames)
 
         try:
             self._stream = sd.InputStream(
@@ -108,7 +128,27 @@ class AudioRecorder:
         except Exception as e:
             with self._lock:
                 self._recording = False
+                self._close_wave_locked(discard=True)
             self.error_message = f"Mikrofon-Fehler: {e}"
+
+    def _on_audio(self, indata: np.ndarray, frames: int) -> None:
+        # Konvertierung außerhalb des Locks — im Lock nur der Dateizugriff.
+        data_int16 = (np.clip(indata, -1.0, 1.0) * 32767).astype(np.int16)
+        level = float(np.sqrt(np.mean(indata ** 2)))
+        with self._lock:
+            if not self._recording or self._wave is None:
+                return
+            try:
+                self._wave.writeframes(data_int16.tobytes())
+                self._frames_written += frames
+                self.audio_level = level
+            except Exception as e:
+                # Platte voll o. ä.: Datei verwerfen, Fehler merken. is_recording
+                # bleibt True, damit der Workflow den Stopp regulär durchläuft
+                # und den Fehler beim Verarbeiten meldet (statt in RECORDING
+                # hängen zu bleiben).
+                self.error_message = f"Aufnahme-Schreibfehler: {e}"
+                self._close_wave_locked(discard=True)
 
     def stop_recording(self) -> None:
         with self._lock:
@@ -128,32 +168,40 @@ class AudioRecorder:
             pass
 
         with self._lock:
-            frames = list(self._frames)
-
-        if frames:
-            self._recording_path = self._save_wav(frames)
+            path = self._wave_path
+            ok = (
+                self._wave is not None
+                and self._frames_written > 0
+                and self.error_message is None
+            )
+            self._close_wave_locked(discard=not ok)
+            if ok:
+                self._recording_path = path
 
     def discard_recording(self) -> None:
-        path = self._recording_path
-        self._recording_path = None
-        self._frames = []
+        with self._lock:
+            self._close_wave_locked(discard=True)
+            path = self._recording_path
+            self._recording_path = None
+            self._frames_written = 0
         if path and os.path.exists(path):
             try:
                 os.remove(path)
             except Exception:
                 pass
 
-    def _save_wav(self, frames: list[np.ndarray]) -> str:
-        data      = np.concatenate(frames, axis=0).flatten()
-        data_int16 = (np.clip(data, -1.0, 1.0) * 32767).astype(np.int16)
-
-        ts   = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        path = os.path.join(recordings_dir(), f"blitzdiktat_{ts}.wav")
-
-        with wave.open(path, "w") as wf:
-            wf.setnchannels(CHANNELS)
-            wf.setsampwidth(2)
-            wf.setframerate(SAMPLE_RATE)
-            wf.writeframes(data_int16.tobytes())
-
-        return path
+    def _close_wave_locked(self, discard: bool) -> None:
+        """Schließt die offene WAV-Datei; nur mit gehaltenem self._lock aufrufen."""
+        wf, path = self._wave, self._wave_path
+        self._wave = None
+        self._wave_path = None
+        if wf is not None:
+            try:
+                wf.close()
+            except Exception:
+                pass
+        if discard and path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
