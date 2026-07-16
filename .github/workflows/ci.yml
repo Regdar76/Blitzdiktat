@@ -6,6 +6,12 @@ on:
     branches:
       - main
 
+# Überholte Läufe desselben Branches abbrechen — spart v. a. den
+# 30-Minuten-macOS-Job bei schnell aufeinanderfolgenden Pushes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
