@@ -67,6 +67,17 @@ class BlitzdiktatImeService : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
         engine = DictationEngine(this)
+        scope.launch(Dispatchers.IO) {
+            // EncryptedSharedPreferences vorwärmen (Keystore-Init dauert auf
+            // manchen Geräten mehrere hundert ms — nicht beim ersten Zugriff
+            // auf dem Main-Thread beim Tastatur-Öffnen).
+            AppSettings.prewarm(this@BlitzdiktatImeService)
+            // 14-Tage-Bereinigung lief bisher nur beim App-Start — wer nur
+            // die Tastatur nutzt, sammelte unbegrenzt Transkripte an.
+            runCatching {
+                TranscriptStore.cleanup(TranscriptStore.dir(this@BlitzdiktatImeService))
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -208,9 +219,13 @@ class BlitzdiktatImeService : InputMethodService() {
     private fun startDictation() {
         if (engine.isActive) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            status("Mikrofon-Berechtigung fehlt — bitte die Blitzdiktat-App einmal öffnen.")
+            status("Mikrofon-Berechtigung fehlt — bitte in der Blitzdiktat-App erlauben.")
+            // Extra mitgeben, damit die MainActivity den Berechtigungs-
+            // Dialog sofort zeigt — vorher musste der Nutzer raten und
+            // eine Workflow-Karte antippen.
             startActivity(Intent(this, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(MainActivity.EXTRA_REQUEST_MIC, true)
             })
             return
         }

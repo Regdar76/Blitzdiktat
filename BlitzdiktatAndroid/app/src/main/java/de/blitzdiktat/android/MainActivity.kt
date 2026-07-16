@@ -2,6 +2,7 @@
 package de.blitzdiktat.android
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
@@ -37,6 +38,11 @@ import de.blitzdiktat.android.workflows.WorkflowType
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        /** Von der Blitzdiktat-Tastatur gesetzt: Berechtigung sofort anfragen. */
+        const val EXTRA_REQUEST_MIC = "de.blitzdiktat.android.REQUEST_MIC"
+    }
+
     private val viewModel: AppViewModel by viewModels()
     private var pendingWorkflow: WorkflowType? = null
 
@@ -47,7 +53,10 @@ class MainActivity : ComponentActivity() {
         pendingWorkflow = null
         if (granted && wf != null) {
             viewModel.toggle(wf)
-        } else if (!granted) {
+        } else if (granted) {
+            // Anfrage kam ohne Workflow (z. B. aus der Tastatur)
+            Toast.makeText(this, "Mikrofon freigegeben — die Tastatur ist einsatzbereit.", Toast.LENGTH_LONG).show()
+        } else {
             Toast.makeText(this, "Ohne Mikrofon-Berechtigung geht es nicht.", Toast.LENGTH_LONG).show()
         }
     }
@@ -76,6 +85,24 @@ class MainActivity : ComponentActivity() {
                     onImportClick = { openTextDocument.launch(arrayOf("text/*")) },
                 )
             }
+        }
+        maybeRequestMicFromIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        maybeRequestMicFromIntent(intent)
+    }
+
+    /** Die Tastatur schickt EXTRA_REQUEST_MIC — Berechtigung sofort anfragen. */
+    private fun maybeRequestMicFromIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_REQUEST_MIC, false) != true) return
+        intent.removeExtra(EXTRA_REQUEST_MIC)
+        val granted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            micPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
