@@ -1,0 +1,103 @@
+# Release-Pipeline für Android: baut bei einem Tag-Push (android-v*) die
+# release-signierte APK und hängt sie als Asset an ein GitHub-Release.
+#
+# Benötigte Repository-Secrets (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64   – der Signing-Keystore (.jks) als Base64
+#   ANDROID_KEYSTORE_PASSWORD – storePassword
+#   ANDROID_KEY_ALIAS         – keyAlias
+#   ANDROID_KEY_PASSWORD      – keyPassword
+#
+# Verwendung:
+#   git tag android-v0.3.4 && git push origin android-v0.3.4
+#   → Release "android-v0.3.4" mit Blitzdiktat-Android-0.3.4.apk
+#
+# Keystore niemals einchecken — nur als Secret. Der Runner ist ephemer,
+# die entschlüsselte Datei existiert nur für die Dauer des Jobs.
+
+name: Release Android
+
+on:
+  push:
+    tags:
+      - "android-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-android:
+    name: Build signed APK and attach to release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check secrets
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KS" ]; then
+            echo "::error::Secret ANDROID_KEYSTORE_BASE64 fehlt — Release-Signing nicht möglich."
+            echo "Bitte Keystore + Passwörter als Repository-Secrets hinterlegen (siehe Kopf dieser Datei)."
+            exit 1
+          fi
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Restore keystore and key.properties
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > BlitzdiktatAndroid/release.jks
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "keyPassword=$ANDROID_KEY_PASSWORD"
+          } > BlitzdiktatAndroid/key.properties
+
+      - name: Build release APK
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleRelease
+        working-directory: BlitzdiktatAndroid
+
+      - name: Rename APK to versioned filename
+        id: apk
+        run: |
+          VERSION="${GITHUB_REF_NAME#android-v}"
+          OUT="Blitzdiktat-Android-${VERSION}.apk"
+          cp BlitzdiktatAndroid/app/build/outputs/apk/release/app-release.apk "$OUT"
+          echo "file=$OUT" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create release and upload APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME existiert — Asset wird angehängt."
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Blitzdiktat Android ${{ steps.apk.outputs.version }}" \
+              --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" "${{ steps.apk.outputs.file }}" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Cleanup signing material
+        if: always()
+        run: rm -f BlitzdiktatAndroid/release.jks BlitzdiktatAndroid/key.properties
