@@ -47,15 +47,19 @@ def _load_model(model_name: str) -> "WhisperModel":
             f"faster-whisper nicht verfügbar{detail}. "
             "Bitte 'pip install faster-whisper' ausführen und App neu starten."
         )
-    if model_name not in _CACHE:
-        os.makedirs(cache_dir(), exist_ok=True)
-        _CACHE[model_name] = WhisperModel(
-            model_name,
-            device="cpu",
-            compute_type="int8",
-            download_root=cache_dir(),
-        )
-    return _CACHE[model_name]
+    # Lock hier statt beim Aufrufer: preload_default_model() lud sonst ohne
+    # Lock — startete die erste Transkription während des Preloads, luden
+    # beide Threads dasselbe Modell parallel (doppelter RAM, Race auf _CACHE).
+    with _LOCK:
+        if model_name not in _CACHE:
+            os.makedirs(cache_dir(), exist_ok=True)
+            _CACHE[model_name] = WhisperModel(
+                model_name,
+                device="cpu",
+                compute_type="int8",
+                download_root=cache_dir(),
+            )
+        return _CACHE[model_name]
 
 
 def transcribe_local(
@@ -64,8 +68,7 @@ def transcribe_local(
     language: str = "de",
     custom_terms: list[str] | None = None,
 ) -> str:
-    with _LOCK:
-        model = _load_model(model_name)
+    model = _load_model(model_name)
 
     kwargs: dict = {"language": language, "beam_size": 5}
     if custom_terms:
