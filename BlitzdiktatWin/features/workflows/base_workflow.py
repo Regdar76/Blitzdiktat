@@ -82,6 +82,15 @@ class BaseWorkflow(ABC):
         self.state = WorkflowState()
         self.on_state_change: StateCallback | None = None
         self.on_output: OutputCallback | None = None
+        # Nach cancel() darf ein noch laufender Verarbeitungs-Thread weder
+        # Phasen melden noch Output liefern — sonst fügt ein alter Workflow
+        # seinen Text verspätet ein, nachdem längst ein neuer aktiv ist.
+        self.cancelled = False
+
+    def cancel(self) -> None:
+        self.cancelled = True
+        self.on_state_change = None
+        self.on_output = None
 
     def _set_phase(
         self,
@@ -89,11 +98,19 @@ class BaseWorkflow(ABC):
         status: str = "",
         error: str = "",
     ) -> None:
+        if self.cancelled:
+            return
         self.state.phase = phase
         self.state.status_text = status
         self.state.error_text = error
-        if self.on_state_change:
-            self.on_state_change(self.state)
+        cb = self.on_state_change
+        if cb:
+            cb(self.state)
+
+    def _emit_output(self, text: str) -> None:
+        cb = self.on_output
+        if cb and not self.cancelled:
+            cb(text)
 
     @property
     def is_recording(self) -> bool:

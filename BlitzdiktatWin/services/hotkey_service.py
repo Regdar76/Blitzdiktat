@@ -10,6 +10,10 @@ class HotkeyService:
     """
     Global hotkey listener with press+release support for hold-to-record behavior.
     Combo format: 'ctrl+shift+r' (modifiers: ctrl, shift, alt; then the key char).
+
+    Callbacks are invoked directly on the pynput listener thread so that
+    press/release order is preserved — they must return quickly (e.g. only
+    enqueue work) and never block.
     """
 
     def __init__(self):
@@ -22,7 +26,8 @@ class HotkeyService:
 
     def register(self, combo: str, on_press: PressCallback, on_release: PressCallback) -> None:
         key_set = self._parse(combo)
-        self._bindings[key_set] = (on_press, on_release)
+        with self._lock:
+            self._bindings[key_set] = (on_press, on_release)
 
     def unregister_all(self) -> None:
         with self._lock:
@@ -71,7 +76,10 @@ class HotkeyService:
                     triggers.append(cb_press)
 
         for cb in triggers:
-            threading.Thread(target=cb, daemon=True).start()
+            try:
+                cb()
+            except Exception:
+                pass
 
     def _on_up(self, key) -> None:
         mod = self._mod_name(key)
@@ -93,7 +101,10 @@ class HotkeyService:
                         releases.append(self._bindings[combo][1])
 
         for cb in releases:
-            threading.Thread(target=cb, daemon=True).start()
+            try:
+                cb()
+            except Exception:
+                pass
 
     @staticmethod
     def _mod_name(key) -> str | None:

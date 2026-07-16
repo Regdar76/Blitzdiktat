@@ -155,8 +155,7 @@ class ProtokollWorkflow(BaseWorkflow):
 
             done_status = f"Fertig. ({hint})" if hint else "Fertig."
             self._set_phase(WorkflowPhase.DONE, status=done_status)
-            if self.on_output:
-                self.on_output(protokoll)
+            self._emit_output(protokoll)
         except Exception as e:
             self._set_phase(WorkflowPhase.ERROR, error=friendly_message(e))
 
@@ -193,8 +192,7 @@ class ProtokollWorkflow(BaseWorkflow):
 
             done_status = f"Fertig. ({hint})" if hint else "Fertig."
             self._set_phase(WorkflowPhase.DONE, status=done_status)
-            if self.on_output:
-                self.on_output(protokoll)
+            self._emit_output(protokoll)
         except Exception as e:
             self._set_phase(WorkflowPhase.ERROR, error=friendly_message(e))
             self._recorder.discard_recording()
