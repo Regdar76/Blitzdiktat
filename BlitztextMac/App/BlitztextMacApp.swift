@@ -114,7 +114,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func handleHotkeyCancel() {
-        appState.activeWorkflow?.stop()
+        // Escape verwirft die aktive Aufnahme/Verarbeitung, statt sie zu
+        // stoppen: stop() hätte transkribiert und den Text ins gerade aktive
+        // Fenster eingefügt — und der Escape-Monitor lauscht systemweit
+        // (jedes Escape in irgendeiner App hätte ausgelöst).
+        guard let active = appState.activeWorkflow, active.phase.isActive else { return }
+        appState.resetCurrentWorkflow()
     }
 
     @objc private func togglePopover() {

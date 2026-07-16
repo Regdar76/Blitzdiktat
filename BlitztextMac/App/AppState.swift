@@ -160,7 +160,15 @@ final class AppState {
             return
         }
 
-        activeWorkflow?.stop()
+        // Alten Workflow verwerfen statt stoppen: stop() würde eine laufende
+        // Aufnahme fertig transkribieren und über die noch verdrahteten
+        // Callbacks zusätzlich einfügen — Doppel-Paste-Race mit dem neuen
+        // Workflow. Deshalb erst Callbacks abkoppeln, dann reset().
+        if let previous = activeWorkflow {
+            previous.onOutput = nil
+            previous.onPhaseChange = nil
+            previous.reset()
+        }
         menuBarStatusResetTask?.cancel()
         workflowCleanupTask?.cancel()
         activeLaunchSource = source
@@ -592,10 +600,12 @@ final class AppState {
 
             target.application.activate(options: [])
         } else {
+            handlePasteFailure()
             return
         }
 
         guard attemptsRemaining > 0 else {
+            handlePasteFailure()
             return
         }
 
@@ -616,6 +626,17 @@ final class AppState {
                 pasteboardState: pasteboardState
             )
         }
+    }
+
+    private func handlePasteFailure() {
+        // Auto-Paste nicht möglich (kein Ziel oder die Ziel-App wurde nicht
+        // rechtzeitig frontmost). Das Ergebnis bleibt in der Zwischenablage:
+        // Der geplante 60-s-Restore wird abgebrochen, weil er das Transkript
+        // unwiederbringlich überschrieben hätte — auf dem Mac gibt es (noch)
+        // keinen Transkript-Verlauf als Sicherheitsnetz.
+        pasteboardCleanupTask?.cancel()
+        menuBarStatus = .error(activeWorkflow?.type)
+        scheduleMenuBarStatusReset(after: 1.6)
     }
 
     private func performPaste() {
