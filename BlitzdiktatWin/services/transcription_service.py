@@ -1,8 +1,13 @@
 # Copyright (c) 2026 Thorben Meier. MIT License.
 import asyncio
+import os
 import re
 from openai import AsyncOpenAI, APIConnectionError, APITimeoutError, APIStatusError
 from .credentials_service import load_api_key
+
+# Die OpenAI-Audio-API akzeptiert maximal 25 MB pro Datei. Ein 16-kHz/16-bit-
+# WAV wächst mit ~1,9 MB/min — nach ca. 13 Minuten ist das Limit erreicht.
+OPENAI_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 # Standardmodell für Online-Transkription — überschreibbar in settings.json
 # über das Feld "openai_transcription_model" (leer = Standard).
@@ -44,6 +49,14 @@ def apply_voice_commands(text: str) -> str:
     # "Absatz" → Zeilenumbruch (umgebende Satzzeichen/Leerzeichen mitentfernen)
     text = re.sub(r'[,;.!\s]*(?<!\w)[Aa]bsatz(?!\w)[,;.!\s]*', '\n', text)
     return text
+
+
+def exceeds_online_limit(audio_path: str) -> bool:
+    """True, wenn die Datei zu groß für die OpenAI-Audio-API ist."""
+    try:
+        return os.path.getsize(audio_path) > OPENAI_MAX_UPLOAD_BYTES
+    except OSError:
+        return False
 
 
 def _is_network_error(exc: BaseException) -> bool:
@@ -93,6 +106,19 @@ def transcribe_sync(
     if backend == "local":
         from .local_transcription_service import transcribe_local
         return transcribe_local(audio_path, local_model, language, custom_terms), ""
+
+    # Zu große Dateien vorab abfangen — der Upload würde sonst mit einer
+    # generischen API-Fehlermeldung scheitern (und der Netzwerk-Fallback
+    # griffe nicht, weil es kein Verbindungsfehler ist).
+    if exceeds_online_limit(audio_path):
+        from .local_transcription_service import transcribe_local, AVAILABLE
+        if AVAILABLE:
+            text = transcribe_local(audio_path, local_model, language, custom_terms)
+            return text, "Aufnahme zu groß für Online (25-MB-Limit) — lokal transkribiert"
+        raise RuntimeError(
+            "Aufnahme zu groß für die Online-Transkription (max. 25 MB, ca. 13 Minuten). "
+            "Bitte das lokale Backend aktivieren oder kürzer aufnehmen."
+        )
 
     loop = asyncio.new_event_loop()
     try:
