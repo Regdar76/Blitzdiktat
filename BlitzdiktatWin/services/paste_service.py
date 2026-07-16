@@ -250,8 +250,15 @@ def _write_clipboard(text: str) -> bool:
     else:
         _log("_write_clipboard: could not open clipboard after 5 attempts")
         return False
+    # Reihenfolge ist wichtig: Erst den Puffer vollständig vorbereiten, DANN
+    # EmptyClipboard + SetClipboardData. Vorher wurde die Zwischenablage des
+    # Nutzers geleert, bevor die Fehlpfade (GlobalAlloc/GlobalLock = NULL)
+    # erreicht waren — schlug einer fehl, war das Clipboard weg und der
+    # Diktat-Text verloren. Außerdem: hmem gehört erst nach erfolgreichem
+    # SetClipboardData dem System — bis dahin müssen wir es selbst freigeben.
+    hmem = None
+    transferred = False
     try:
-        _user32.EmptyClipboard()
         enc  = (text + "\x00").encode("utf-16-le")
         hmem = _kernel32.GlobalAlloc(0x0042, len(enc))   # GMEM_MOVEABLE|GMEM_ZEROINIT
         if not hmem:
@@ -263,13 +270,20 @@ def _write_clipboard(text: str) -> bool:
             return False
         ctypes.memmove(ptr, enc, len(enc))
         _kernel32.GlobalUnlock(hmem)
-        _user32.SetClipboardData(_CF_UNICODETEXT, hmem)
+
+        _user32.EmptyClipboard()
+        if not _user32.SetClipboardData(_CF_UNICODETEXT, hmem):
+            _log("_write_clipboard: SetClipboardData failed")
+            return False
+        transferred = True
         _log(f"_write_clipboard: {len(text)} chars written OK")
         return True
     except Exception as exc:
         _log(f"_write_clipboard: exception: {exc}")
         return False
     finally:
+        if hmem and not transferred:
+            _kernel32.GlobalFree(hmem)
         _user32.CloseClipboard()
 
 

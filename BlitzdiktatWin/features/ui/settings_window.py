@@ -4,8 +4,6 @@ Settings window — equivalent to macOS SettingsContentView.
 Opens as a modal dialog from the main window.
 """
 
-import os
-import sys
 import tkinter as tk
 import customtkinter as ctk
 
@@ -475,8 +473,14 @@ class SettingsWindow(ctk.CTkToplevel):
     def _on_model_change(self, label: str) -> None:
         idx = self._model_labels.index(label)
         model_name = self._model_names[idx]
+        previous = self._app.settings.local_whisper_model
         self._app.settings.local_whisper_model = model_name
         self._app.save_settings()
+        if previous and previous != model_name:
+            # Altes Modell aus dem RAM werfen — sonst liegen z. B. medium
+            # (1,5 GB) und large-v3 (3 GB) gleichzeitig im Speicher.
+            from services.local_transcription_service import evict_model
+            evict_model(previous)
         self._model_status.configure(text=self._model_status_text(model_name))
 
     def _on_llm_fast_change(self, label: str) -> None:
@@ -526,14 +530,14 @@ class SettingsWindow(ctk.CTkToplevel):
         s.emoji_text.emoji_density = self._emoji_var.get()
         s.protokoll.system_prompt = self._protokoll_prompt.get("1.0", "end").strip()
 
+        # Kein Neustart nötig: save_settings() bindet die Hotkeys live neu,
+        # alle übrigen Einstellungen werden beim nächsten Workflow-Start
+        # gelesen. Der frühere os.execv-Neustart zerlegte zudem Pfade mit
+        # Leerzeichen (C:\Program Files\...) und ließ Tray-Icon/Listener
+        # verwaist zurück.
         self._app.save_settings()
-        self._show_toast("Gespeichert ✓  —  App wird neu gestartet …")
-        self.after(1500, self._restart)
-
-    def _restart(self) -> None:
-        """Startet die App neu, indem der laufende Prozess durch eine neue Instanz ersetzt wird."""
-        self.winfo_toplevel().destroy()
-        os.execv(sys.executable, [sys.executable] + sys.argv)
+        self._show_toast("Gespeichert ✓")
+        self.after(1200, self.destroy)
 
     def _show_toast(self, msg: str) -> None:
         toast = ctk.CTkLabel(
