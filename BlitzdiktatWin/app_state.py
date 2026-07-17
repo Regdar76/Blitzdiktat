@@ -193,6 +193,9 @@ class AppState:
         _apply_model_overrides(self.settings)
         self.active_workflow: BaseWorkflow | None = None
         self.hotkey_service = HotkeyService()
+        # Einmalige Nutzer-Benachrichtigung (z. B. "API Key fehlt") —
+        # Abnehmer (Tray) zeigt sie an und setzt sie auf None zurück.
+        self.notification: str | None = None
         self._subscribers: list[AppStateCallback] = []
         self._target_hwnd: int = 0
         self._lock = threading.Lock()
@@ -265,6 +268,11 @@ class AppState:
 
     def start_workflow(self, wtype: WorkflowType) -> None:
         if not self.is_configured:
+            # Nicht still zurückkehren: Hotkey ohne Konfiguration war das
+            # FAQ-Symptom "Es passiert nichts". Einmalige Meldung setzen —
+            # das Tray zeigt sie als Ballon-Benachrichtigung.
+            self.notification = self.config_error
+            self._notify()
             return
 
         self._stop_active()
