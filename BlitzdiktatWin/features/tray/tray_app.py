@@ -120,6 +120,13 @@ class TrayApp:
     def _on_state_changed(self, state: AppState) -> None:
         if not self._icon:
             return
+        message = state.notification
+        if message:
+            state.notification = None
+            try:
+                self._icon.notify(message, "Blitzdiktat")
+            except Exception:
+                pass
         wf = state.active_workflow
         phase = wf.state.phase if wf else WorkflowPhase.IDLE
         color = wf.workflow_type.color if wf else "#3B82F6"
