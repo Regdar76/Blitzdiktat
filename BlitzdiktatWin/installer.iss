@@ -6,7 +6,7 @@
 ; ============================================================================
 
 #define AppName      "Blitzdiktat"
-#define AppVersion   "2.1.8"
+#define AppVersion   "2.1.9"
 #define AppPublisher "Thorben Meier"
 #define AppURL       "https://github.com/Regdar76/Blitzdiktat"
 #define AppExeName   "Blitzdiktat.exe"
