@@ -14,7 +14,7 @@ from features.ui.main_window import MainWindow
 from services import local_server
 from services.audio_recorder import cleanup_old_recordings
 from services.transcript_store import cleanup_old_transcripts
-from services.local_transcription_service import preload_default_model
+from services.local_transcription_service import start_preload
 from version import __version__
 
 
@@ -24,7 +24,7 @@ def main() -> None:
     threading.Thread(target=cleanup_old_transcripts, daemon=True).start()
 
     # Small-Modell beim ersten Start vorausladen, damit es beim ersten Einsatz sofort bereit ist
-    threading.Thread(target=preload_default_model, daemon=True).start()
+    start_preload()
 
     app_state = AppState()
     ctk.set_appearance_mode(app_state.settings.appearance_mode)
@@ -44,6 +44,8 @@ def main() -> None:
         threading.Thread(target=start_local_ai, daemon=True).start()
 
     main_window = MainWindow(app_state)
+    if app_state.setup_busy():
+        main_window.show()          # die Einrichtung läuft: Fortschritt sofort sichtbar machen
 
     tray = TrayApp(
         app_state,

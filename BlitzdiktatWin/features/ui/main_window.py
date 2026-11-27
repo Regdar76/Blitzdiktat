@@ -62,6 +62,7 @@ class MainWindow:
 
         self._note_window = None
         self._build_ui()
+        self._root.after(0, self._poll_setup)
         app_state.subscribe(self._on_state_changed)
         app_state.note_listener = self._on_note_text
 
@@ -244,6 +245,32 @@ class MainWindow:
             self._wf_containers[wtype] = container
             self._wf_subtitles[wtype]  = sub
 
+        # ---- Sperr-Ansicht: solange die Einrichtung läuft --------------
+        self._workflow_frame = workflow_frame
+        self._setup_overlay = ctk.CTkFrame(
+            self._frame, corner_radius=10, border_width=1,
+            border_color=("#D1D5DB", "#4B5563"), fg_color=("#F3F4F6", "#1F2937"),
+        )
+        ctk.CTkLabel(self._setup_overlay, text="⏳", font=ctk.CTkFont(size=40)).pack(pady=(40, 4))
+        ctk.CTkLabel(
+            self._setup_overlay, text="Blitzdiktat richtet sich ein",
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack()
+        self._setup_msg = ctk.CTkLabel(
+            self._setup_overlay, text="", font=ctk.CTkFont(size=12),
+            wraplength=_WINDOW_W - 80, justify="center",
+        )
+        self._setup_msg.pack(padx=14, pady=(8, 10))
+        self._setup_bar = ctk.CTkProgressBar(self._setup_overlay, width=_WINDOW_W - 90, mode="indeterminate")
+        self._setup_bar.pack(pady=(0, 12))
+        self._setup_bar_mode = None
+        ctk.CTkLabel(
+            self._setup_overlay,
+            text="Das dauert beim ersten Start einige Minuten.\nBitte warten – danach ist alles bereit.",
+            font=ctk.CTkFont(size=11), text_color=("#6B7280", "#9CA3AF"), justify="center",
+        ).pack(pady=(0, 20))
+        self._setup_visible = False
+
         # ---- Trennlinie ---------------------------------------------
         ctk.CTkFrame(self._frame, height=1, fg_color=("#E5E7EB", "#374151")).pack(
             fill="x", padx=_PAD, pady=4
@@ -379,6 +406,7 @@ class MainWindow:
     def _on_state_changed(self, state: AppState) -> None:
         self._root.after(0, self._update_ui)
         self._root.after(0, self._update_note_window)
+        self._root.after(0, self._refresh_setup_overlay)
 
     # ------------------------------------------------------------------
     # Notiz-Fenster
@@ -397,6 +425,37 @@ class MainWindow:
         """Diktierter Text der Notiz – kommt aus einem Hintergrund-Thread."""
         self._root.after(0, lambda: self._get_note_window().append_dictation(text))
 
+    def _refresh_setup_overlay(self) -> None:
+        """Zeigt oder versteckt die Sperr-Ansicht und hält Text und Balken aktuell."""
+        busy = self._app.setup_busy()
+        if busy:
+            progress = local_ai_setup.status.progress if local_ai_setup.is_working() else None
+            self._setup_msg.configure(text=busy)
+            mode = "determinate" if progress is not None else "indeterminate"
+            if mode != self._setup_bar_mode:
+                self._setup_bar.stop()
+                self._setup_bar.configure(mode=mode)
+                self._setup_bar_mode = mode
+                if mode == "indeterminate":
+                    self._setup_bar.start()
+            if progress is not None:
+                self._setup_bar.set(progress)
+            if not self._setup_visible:
+                self._setup_visible = True
+                self._setup_overlay.place(in_=self._workflow_frame, x=0, y=0, relwidth=1, relheight=1)
+                self._setup_overlay.lift()
+                self._update_ui()
+        elif self._setup_visible:
+            self._setup_visible = False
+            self._setup_bar.stop()
+            self._setup_bar_mode = None
+            self._setup_overlay.place_forget()
+            self._update_ui()
+
+    def _poll_setup(self) -> None:
+        self._refresh_setup_overlay()
+        self._root.after(400, self._poll_setup)
+
     def _update_note_window(self) -> None:
         wf = self._app.active_workflow
         if wf and wf.workflow_type == WorkflowType.NOTIZ and wf.state.phase.is_active:
@@ -414,7 +473,10 @@ class MainWindow:
         wf = self._app.active_workflow
         phase = wf.state.phase if wf else WorkflowPhase.IDLE
 
-        if phase == WorkflowPhase.RECORDING:
+        busy = self._app.setup_busy()
+        if busy:
+            self._status_label.configure(text="⏳  Einrichtung läuft – bitte warten", text_color="#F59E0B")
+        elif phase == WorkflowPhase.RECORDING:
             self._status_label.configure(
                 text=f"🔴  {wf.state.status_text}",
                 text_color="#EF4444",
@@ -438,12 +500,11 @@ class MainWindow:
                 text=f"⚠️  {clean}" if clean else "⚠️  Unbekannter Fehler",
                 text_color="#EF4444",
             )
-        elif local_ai_setup.status.state in (local_ai_setup.WORKING, local_ai_setup.FAILED):
-            working = local_ai_setup.status.state == local_ai_setup.WORKING
+        elif local_ai_setup.status.state == local_ai_setup.FAILED:
             msg = local_ai_setup.status.message
             self._status_label.configure(
-                text=("🧠  " if working else "⚠️  ") + (msg if len(msg) <= 90 else msg[:87] + "..."),
-                text_color="#F59E0B" if working else "#EF4444",
+                text="⚠️  " + (msg if len(msg) <= 90 else msg[:87] + "..."),
+                text_color="#EF4444",
             )
         else:
             if not self._app.is_configured:
@@ -492,7 +553,7 @@ class MainWindow:
                 container.configure(fg_color=wtype.color)
                 sub.configure(text="")          # hide subtitle while active
             else:
-                disabled = active_type is not None
+                disabled = active_type is not None or bool(busy)
                 btn.configure(
                     text=f"{emoji}  {label}",
                     state="disabled" if disabled else "normal",
@@ -504,7 +565,7 @@ class MainWindow:
 
         if self._import_btn:
             self._import_btn.configure(
-                state="disabled" if active_type is not None else "normal"
+                state="disabled" if (active_type is not None or busy) else "normal"
             )
 
     # ------------------------------------------------------------------

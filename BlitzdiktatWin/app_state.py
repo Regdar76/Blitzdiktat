@@ -333,7 +333,22 @@ class AppState:
         with self._lock:
             self._target_hwnd = hwnd
 
+    def setup_busy(self) -> str | None:
+        """Text, solange die Einrichtung noch läuft (lokale KI, Spracherkennungs-Modell) –
+        dann ist Blitzdiktat noch nicht benutzbar. None = alles bereit."""
+        from services import local_ai_setup, local_transcription_service
+        if local_ai_setup.is_working():
+            return local_ai_setup.status.message or "Lokale KI wird eingerichtet …"
+        if local_transcription_service.is_preloading() and self.settings.transcription_backend == "local":
+            return "Lade das Spracherkennungs-Modell (ca. 500 MB) …"
+        return None
+
     def start_workflow(self, wtype: WorkflowType) -> None:
+        busy = self.setup_busy()
+        if busy:
+            self.notification = f"Blitzdiktat richtet sich noch ein – bitte warten. {busy}"
+            self._notify()
+            return
         if not self.is_configured:
             # Nicht still zurückkehren: Hotkey ohne Konfiguration war das
             # FAQ-Symptom "Es passiert nichts". Einmalige Meldung setzen —
@@ -423,6 +438,11 @@ class AppState:
             wf.stop()
 
     def import_file_for_protokoll(self, path: str) -> None:
+        busy = self.setup_busy()
+        if busy:
+            self.notification = f"Blitzdiktat richtet sich noch ein – bitte warten. {busy}"
+            self._notify()
+            return
         from services import llm_service
         problem = (None if self.is_configured else self.config_error) or llm_service.config_problem()
         if problem:
@@ -480,10 +500,16 @@ class AppState:
             self.notification = message
             self._notify()
 
-        threading.Thread(
-            target=local_ai_setup.run, args=(self.settings, self.save_ai_settings, notify, force),
-            daemon=True, name="local-ai-setup",
-        ).start()
+        if local_ai_setup.needs_local_ai(self.settings) or force:
+            local_ai_setup.mark_starting()             # ab jetzt gesperrt, bis alles fertig ist
+
+        def worker() -> None:
+            try:
+                local_ai_setup.run(self.settings, self.save_ai_settings, notify, force)
+            except Exception as e:                     # nie dauerhaft gesperrt bleiben
+                local_ai_setup._set(local_ai_setup.FAILED, f"Unerwarteter Fehler: {str(e)[:120]}")
+
+        threading.Thread(target=worker, daemon=True, name="local-ai-setup").start()
 
     def heal_local_model(self, names: list[str] | None = None) -> bool:
         """Korrigiert einen Modellnamen, den der eigene Server so nicht mehr kennt.

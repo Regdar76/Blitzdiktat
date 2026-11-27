@@ -83,12 +83,33 @@ def evict_model(model_name: str) -> None:
         _CACHE.pop(model_name, None)
 
 
+_PRELOADING = False
+
+
+def is_preloading() -> bool:
+    """True, solange das Standardmodell heruntergeladen wird (App noch nicht benutzbar)."""
+    return _PRELOADING
+
+
+def start_preload() -> None:
+    """Startet das Vorladen im Hintergrund. Fehlt das Modell, gilt die App sofort als
+    "noch in Einrichtung" – nicht erst, wenn der Thread läuft."""
+    global _PRELOADING
+    if AVAILABLE and not is_model_cached(DEFAULT_MODEL):
+        _PRELOADING = True
+    threading.Thread(target=preload_default_model, daemon=True, name="whisper-preload").start()
+
+
 def preload_default_model() -> None:
     """Lädt das Small-Modell im Hintergrund vor, damit es beim ersten Einsatz sofort verfügbar ist."""
+    global _PRELOADING
     if not AVAILABLE:
+        _PRELOADING = False
         return
     if not is_model_cached(DEFAULT_MODEL):
+        _PRELOADING = True
         try:
             _load_model(DEFAULT_MODEL)
         except Exception:
             pass
+    _PRELOADING = False

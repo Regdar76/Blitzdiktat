@@ -250,6 +250,10 @@ class NotizWindow(ctk.CTkToplevel):
     # --------------------------------------------------------- Diktieren
 
     def _toggle_dictation(self) -> None:
+        busy = getattr(self._app, "setup_busy", lambda: None)()
+        if busy:
+            self._say(f"⏳  Blitzdiktat richtet sich noch ein – bitte warten. {busy}", _AMBER)
+            return
         wf = self._app.active_workflow
         if wf and wf.workflow_type == WorkflowType.NOTIZ and wf.is_recording:
             self._app.stop_workflow()

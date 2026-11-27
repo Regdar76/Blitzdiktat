@@ -336,7 +336,7 @@ def test_download_mit_richtiger_pruefsumme(tmp_path, monkeypatch):
     data = b"x" * 1000
     monkeypatch.setattr(las.urllib.request, "urlopen", lambda req, timeout=0: _Response(data))
     dest = tmp_path / "setup.exe"
-    las._download_file("https://example/x.exe", str(dest), hashlib.sha256(data).hexdigest(), 1000, lambda t: None)
+    las._download_file("https://example/x.exe", str(dest), hashlib.sha256(data).hexdigest(), 1000, lambda *a: None)
     assert dest.read_bytes() == data
 
 
@@ -344,7 +344,7 @@ def test_download_mit_falscher_pruefsumme_wird_verworfen(tmp_path, monkeypatch):
     monkeypatch.setattr(las.urllib.request, "urlopen", lambda req, timeout=0: _Response(b"boese"))
     dest = tmp_path / "setup.exe"
     with pytest.raises(las.SetupError, match="Prüfsumme"):
-        las._download_file("https://example/x.exe", str(dest), "0" * 64, 5, lambda t: None)
+        las._download_file("https://example/x.exe", str(dest), "0" * 64, 5, lambda *a: None)
     assert not dest.exists()
 
 
@@ -354,7 +354,7 @@ def test_download_ohne_internet_gibt_klare_meldung(tmp_path, monkeypatch):
 
     monkeypatch.setattr(las.urllib.request, "urlopen", offline)
     with pytest.raises(las.SetupError, match="Internetverbindung"):
-        las._download_file("https://example/x.exe", str(tmp_path / "s.exe"), "0" * 64, 5, lambda t: None)
+        las._download_file("https://example/x.exe", str(tmp_path / "s.exe"), "0" * 64, 5, lambda *a: None)
 
 
 def test_installation_still_merkt_sich_und_entfernt_die_desktopverknuepfung(world, monkeypatch, tmp_path):
@@ -377,7 +377,7 @@ def test_installation_still_merkt_sich_und_entfernt_die_desktopverknuepfung(worl
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(las.subprocess, "run", fake_run)
-    REAL_INSTALL(lambda t: None)
+    REAL_INSTALL(lambda *a: None)
     assert len(ran) == 1
     assert not (desktop / "LM Studio.lnk").exists()
     assert json.load(open(las.ownership_path(), encoding="utf-8"))["lmstudio"] is True
@@ -387,4 +387,129 @@ def test_installation_bricht_bei_zu_wenig_platz_ab(world, monkeypatch):
     monkeypatch.setattr(las, "_free_gb", lambda p: 1)
     monkeypatch.setattr(las, "_download_file", lambda *a: pytest.fail("darf nicht laden"))
     with pytest.raises(las.SetupError, match="Speicherplatz"):
-        REAL_INSTALL(lambda t: None)
+        REAL_INSTALL(lambda *a: None)
+
+
+# ── Sperre, solange die Einrichtung läuft ───────────────────────────────────
+
+def test_fortschritt_wird_im_status_gemeldet(world, monkeypatch):
+    seen: list[tuple[str, float | None]] = []
+    las.subscribe(lambda st: seen.append((st.message, st.progress)))
+    monkeypatch.setattr(las, "_partial_bytes", lambda: int(3 * 1024 ** 3))
+
+    def slow_download(model, url, progress):
+        import time
+        time.sleep(2.2)                                           # der Fortschritt wird alle 2 s abgefragt
+        world.models.append(model.key)
+        return True, "ok"
+
+    monkeypatch.setattr(local_benchmark, "download", slow_download)
+    try:
+        run(settings())
+    finally:
+        las._listeners.clear()
+    downloads = [(m, p) for m, p in seen if m.startswith("Lade Gemma 4 E4B")]
+    assert downloads and downloads[0][1] == pytest.approx(0.5, abs=0.05)      # 3 von 6 GB
+    assert las.status.progress is None                            # fertig: kein Balken mehr
+
+
+def test_ab_dem_start_gilt_die_einrichtung_als_laufend(world):
+    las.mark_starting()
+    assert las.is_working() and las.status.progress is None
+
+
+def _app():
+    import app_state
+    return app_state.AppState()
+
+
+def test_app_ist_gesperrt_solange_die_einrichtung_laeuft(world, monkeypatch):
+    state = _app()
+    las._set(las.WORKING, "Lade LM Studio … 120 von 654 MB", 0.18)
+    assert state.setup_busy() == "Lade LM Studio … 120 von 654 MB"
+    started: list[object] = []
+    monkeypatch.setattr(type(state), "is_configured", property(lambda self: True))
+    from features.workflows.notiz_workflow import NotizWorkflow
+    monkeypatch.setattr(NotizWorkflow, "start", lambda self: started.append(self))
+    from features.workflows.base_workflow import WorkflowType
+    for wtype in WorkflowType:
+        state.start_workflow(wtype)
+    assert started == [] and state.active_workflow is None
+    assert "richtet sich noch ein" in state.notification and "654 MB" in state.notification
+
+
+def test_protokoll_import_ist_waehrend_der_einrichtung_gesperrt(world):
+    state = _app()
+    las._set(las.WORKING, "Lade Gemma 4 E4B …")
+    state.import_file_for_protokoll("x.txt")
+    assert state.active_workflow is None and "richtet sich noch ein" in state.notification
+
+
+def test_nach_der_einrichtung_ist_die_app_frei(world):
+    state = _app()
+    las._set(las.READY, "Lokale KI bereit: Gemma 4 E4B")
+    assert state.setup_busy() is None
+    las._set(las.FAILED, "keine Internetverbindung")             # ein Fehler sperrt nicht für immer
+    assert state.setup_busy() is None
+
+
+def test_spracherkennungs_modell_wird_noch_geladen(world, monkeypatch):
+    from services import local_transcription_service as lts
+    state = _app()
+    state.settings.transcription_backend = "local"
+    monkeypatch.setattr(lts, "_PRELOADING", True)
+    assert "Spracherkennungs-Modell" in state.setup_busy()
+    state.settings.transcription_backend = "online"                # Online-Transkription braucht es nicht
+    assert state.setup_busy() is None
+
+
+def test_vorladen_merkt_sich_sofort_dass_es_laeuft(world, monkeypatch):
+    from services import local_transcription_service as lts
+    release = threading.Event()
+    monkeypatch.setattr(lts, "AVAILABLE", True)
+    monkeypatch.setattr(lts, "is_model_cached", lambda name: False)
+    monkeypatch.setattr(lts, "_load_model", lambda name: release.wait(5))
+    monkeypatch.setattr(lts, "_PRELOADING", False)
+    lts.start_preload()
+    assert lts.is_preloading()                                    # schon vor dem Thread-Start gesperrt
+    release.set()
+    import time
+    for _ in range(50):
+        if not lts.is_preloading():
+            break
+        time.sleep(0.05)
+    assert not lts.is_preloading()
+
+
+def test_gecachtes_modell_sperrt_nicht(world, monkeypatch):
+    from services import local_transcription_service as lts
+    monkeypatch.setattr(lts, "AVAILABLE", True)
+    monkeypatch.setattr(lts, "is_model_cached", lambda name: True)
+    monkeypatch.setattr(lts, "_PRELOADING", False)
+    lts.start_preload()
+    assert not lts.is_preloading()
+
+
+def test_stuerzt_die_einrichtung_ab_bleibt_die_app_nicht_gesperrt(world, monkeypatch):
+    state = _app()
+    state.settings.llm_provider = "custom"
+    monkeypatch.setattr(las, "run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("kaputt")))
+    state.start_local_ai_setup()
+    import time
+    for _ in range(100):
+        if not las.is_working():
+            break
+        time.sleep(0.05)
+    assert las.status.state == las.FAILED and "kaputt" in las.status.message
+    assert state.setup_busy() is None
+
+
+def test_start_sperrt_sofort_bevor_der_thread_laeuft(world, monkeypatch):
+    state = _app()
+    state.settings.llm_provider = "custom"
+    release = threading.Event()
+    monkeypatch.setattr(las, "run", lambda *a, **k: release.wait(5))
+    state.start_local_ai_setup()
+    assert state.setup_busy() is not None                         # schon beim Rückkehren gesperrt
+    las._set(las.IDLE)
+    release.set()

@@ -425,9 +425,10 @@ class SettingsWindow(ctk.CTkToplevel):
         self._auto_status.pack(anchor="w", pady=(0, 4))
         auto_row = ctk.CTkFrame(scroll, fg_color="transparent")
         auto_row.pack(anchor="w", pady=(0, 4))
-        ctk.CTkButton(
+        self._auto_btn = ctk.CTkButton(
             auto_row, text="Automatisch einrichten", width=190, command=self._run_auto_setup,
-        ).pack(side="left", padx=(0, 6))
+        )
+        self._auto_btn.pack(side="left", padx=(0, 6))
         self._adv_toggle = ctk.CTkButton(
             auto_row, text="Erweitert ▾", width=120, command=self._toggle_advanced,
             fg_color="transparent", border_width=1,
@@ -436,6 +437,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self._adv_toggle.pack(side="left")
         self._adv = ctk.CTkFrame(scroll, fg_color="transparent")
         self._adv_open = False
+        self._setup_was_busy = False
         self._tick_auto_status()
         scroll = self._adv          # alles Weitere gehört zur eingeklappten Ansicht
 
@@ -695,10 +697,20 @@ class SettingsWindow(ctk.CTkToplevel):
         return f"🖥️  Lokale KI wird automatisch verwaltet ({s.custom_llm_model or 'noch kein Modell'})."
 
     def _tick_auto_status(self) -> None:
+        """Hält die Statuszeile aktuell und sperrt die KI-Einstellungen, solange die Einrichtung läuft."""
         if not self.winfo_exists():
             return
+        busy = self._app.setup_busy() is not None
         self._auto_status.configure(text=self._auto_status_text())
-        self.after(1000, self._tick_auto_status)
+        state = "disabled" if busy else "normal"
+        self._auto_btn.configure(state=state)
+        self._adv_toggle.configure(state=state)
+        if busy and self._adv_open:
+            self._toggle_advanced()                  # Modellauswahl erst nach der Einrichtung
+        if self._setup_was_busy and not busy:
+            self._refresh_models_quietly()           # fertig: Modelle stehen jetzt zur Wahl
+        self._setup_was_busy = busy
+        self.after(500, self._tick_auto_status)
 
     def _run_auto_setup(self) -> None:
         self._app.settings.local_ai_auto = True

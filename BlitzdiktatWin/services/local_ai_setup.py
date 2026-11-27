@@ -48,6 +48,7 @@ class SetupError(Exception):
 class Status:
     state: str = IDLE
     message: str = ""
+    progress: float | None = None        # 0..1, wenn bekannt (Downloads), sonst None
 
 
 status = Status()
@@ -59,8 +60,8 @@ def subscribe(callback: Callable[[Status], None]) -> None:
     _listeners.append(callback)
 
 
-def _set(state: str, message: str = "") -> None:
-    status.state, status.message = state, message
+def _set(state: str, message: str = "", progress: float | None = None) -> None:
+    status.state, status.message, status.progress = state, message, progress
     for cb in list(_listeners):
         try:
             cb(status)
@@ -70,6 +71,12 @@ def _set(state: str, message: str = "") -> None:
 
 def is_working() -> bool:
     return status.state == WORKING
+
+
+def mark_starting() -> None:
+    """Sofort als "in Arbeit" melden, noch bevor der Hintergrund-Thread läuft –
+    sonst wäre die App in den ersten Augenblicken schon bedienbar."""
+    _set(WORKING, "Lokale KI wird geprüft …")
 
 
 # ── Wann ist die Einrichtung nötig? ─────────────────────────────────────────
@@ -130,7 +137,7 @@ def _free_gb(path: str) -> float:
     return shutil.disk_usage(probe or os.path.expanduser("~")).free / 1024 ** 3
 
 
-def _download_file(url: str, dest: str, sha256: str, size: int, progress: Callable[[str], None]) -> None:
+def _download_file(url: str, dest: str, sha256: str, size: int, progress: Callable[..., None]) -> None:
     request = urllib.request.Request(url, headers={"User-Agent": "Blitzdiktat"})
     digest = hashlib.sha256()
     done = 0
@@ -146,7 +153,10 @@ def _download_file(url: str, dest: str, sha256: str, size: int, progress: Callab
                 done += len(chunk)
                 if time.monotonic() - last > 1.0:
                     last = time.monotonic()
-                    progress(f"Lade LM Studio … {done / 1024 ** 2:.0f} von {size / 1024 ** 2:.0f} MB")
+                    progress(
+                        f"Lade LM Studio … {done / 1024 ** 2:.0f} von {size / 1024 ** 2:.0f} MB",
+                        min(1.0, done / size) if size else None,
+                    )
     except OSError as e:
         raise SetupError(f"LM Studio konnte nicht geladen werden (keine Internetverbindung?): {e}") from e
     if digest.hexdigest().lower() != sha256.lower():
@@ -166,7 +176,7 @@ def _desktop_shortcuts() -> list[str]:
     return [os.path.join(f, "LM Studio.lnk") for f in folders]
 
 
-def install_lm_studio(progress: Callable[[str], None]) -> None:
+def install_lm_studio(progress: Callable[..., None]) -> None:
     """Lädt LM Studio (feste Version, Prüfsumme) und installiert es still."""
     if _free_gb(os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))) < _LM_STUDIO_FREE_GB:
         raise SetupError("Zu wenig freier Speicherplatz für LM Studio.")
@@ -216,7 +226,7 @@ def _partial_bytes() -> int:
     return total
 
 
-def _download_model(model: model_catalog.LocalModel, url: str, progress: Callable[[str], None]) -> tuple[bool, str]:
+def _download_model(model: model_catalog.LocalModel, url: str, progress: Callable[..., None]) -> tuple[bool, str]:
     result: dict = {}
 
     def work() -> None:
@@ -227,7 +237,8 @@ def _download_model(model: model_catalog.LocalModel, url: str, progress: Callabl
     while thread.is_alive():
         thread.join(2.0)
         got = _partial_bytes() / 1024 ** 3
-        progress(f"Lade {model.title} … {got:.1f} von ca. {model.disk_gb + 1:.1f} GB".replace(".", ","))
+        total = model.disk_gb + 1                # Modell plus Bildanhang
+        progress(f"Lade {model.title} … {got:.1f} von ca. {total:.1f} GB".replace(".", ","), min(0.99, got / total))
     return result.get("value", (False, "Download abgebrochen."))
 
 
@@ -281,7 +292,7 @@ def _run(settings, save, notify) -> None:
     # Deinstallation liegen und läuft ohne das Programm nicht.
     if not local_server.find_app():
         _set(WORKING, "Lade LM Studio …")
-        install_lm_studio(lambda text: _set(WORKING, text))
+        install_lm_studio(lambda text, fraction=None: _set(WORKING, text, fraction))
         did_work = True
 
     _set(WORKING, "Starte die lokale KI …")
@@ -314,7 +325,7 @@ def _run(settings, save, notify) -> None:
                 raise SetupError(f"Zu wenig freier Speicherplatz für {target.title}.")
             _set(READY, f"Lokale KI bereit: {interim.title} (für {target.title} fehlt Speicherplatz)")
             return
-        ok, message = _download_model(target, url, lambda text: _set(WORKING, text))
+        ok, message = _download_model(target, url, lambda text, fraction=None: _set(WORKING, text, fraction))
         if not ok:
             if interim is None:
                 raise SetupError(message)
