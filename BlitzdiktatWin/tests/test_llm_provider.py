@@ -5,7 +5,6 @@ import asyncio
 import datetime as dt
 from types import SimpleNamespace
 
-import httpx
 import pytest
 from openai import APIConnectionError, APITimeoutError, BadRequestError
 
@@ -174,8 +173,14 @@ def fake_client(monkeypatch):
     return FakeClient
 
 
+# Anfrage und Antwort nur nachgestellt: Je nach Version bringt das openai-Paket
+# "httpx" oder "httpx2" mit – die Tests sollen von beidem unabhängig sein.
 def _request():
-    return httpx.Request("POST", "http://localhost:1234/v1/chat/completions")
+    return SimpleNamespace(method="POST", url="http://localhost:1234/v1/chat/completions")
+
+
+def _response(status_code: int):
+    return SimpleNamespace(status_code=status_code, request=_request(), headers={})
 
 
 def test_eigener_server_bekommt_adresse_modell_und_denkmodus_aus(fake_client):
@@ -196,8 +201,7 @@ def test_denkmodus_parameter_abschaltbar(fake_client):
 
 def test_server_ohne_denkmodus_parameter_wird_erneut_gefragt(fake_client):
     llm_service.configure_provider("custom", "", "gemma")
-    response = httpx.Response(400, request=_request())
-    fake_client.failures = [BadRequestError("unknown field", response=response, body=None)]
+    fake_client.failures = [BadRequestError("unknown field", response=_response(400), body=None)]
     assert run(llm_service._complete("hallo", "sys", "x", 0.3)) == "Guten Tag,"
     calls = fake_client.instances[0].calls
     assert len(calls) == 2 and "extra_body" not in calls[1]
