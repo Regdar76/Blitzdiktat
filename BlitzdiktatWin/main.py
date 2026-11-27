@@ -11,6 +11,7 @@ import customtkinter as ctk
 from app_state import AppState
 from features.tray.tray_app import TrayApp
 from features.ui.main_window import MainWindow
+from services import local_server
 from services.audio_recorder import cleanup_old_recordings
 from services.transcript_store import cleanup_old_transcripts
 from services.local_transcription_service import preload_default_model
@@ -27,6 +28,14 @@ def main() -> None:
 
     app_state = AppState()
     ctk.set_appearance_mode(app_state.settings.appearance_mode)
+
+    # Läuft die Text-KI über LM Studio auf diesem Rechner, dessen Server schon
+    # jetzt starten – sonst wartet das erste Diktat darauf.
+    if app_state.settings.llm_provider == "custom":
+        threading.Thread(
+            target=local_server.ensure_running,
+            args=(app_state.settings.custom_llm_base_url,), daemon=True,
+        ).start()
 
     main_window = MainWindow(app_state)
 

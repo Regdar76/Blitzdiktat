@@ -25,7 +25,7 @@ Nimmt eine Besprechung, ein Meeting oder eine Baubesprechung auf und erstellt da
 - Windows 11 (Windows 10 funktioniert wahrscheinlich auch)
 - Python 3.11 oder neuer
 - Für lokale Transkription: `pip install faster-whisper`
-- Für Textverbesserung, Dampf ablassen, Emojis und Protokoll: OpenAI API Key mit Zugriff auf `gpt-4o-mini` und `gpt-4o`
+- Für Textverbesserung, Dampf ablassen, Emojis und Protokoll: OpenAI API Key mit Zugriff auf `gpt-4o-mini` und `gpt-4o` — oder eine lokale KI (siehe „Lokale KI für die Textverarbeitung")
 - Für Online-Transkription: OpenAI API Key mit Zugriff auf `whisper-1`
 - Mikrofon
 
@@ -106,6 +106,20 @@ Verfügbare Modelle: tiny, base, small (Standard, empfohlen), medium, large-v3.
 
 Siehe [../docs/local-models.md](../docs/local-models.md) für Details.
 
+## Lokale KI für die Textverarbeitung
+
+Seit 2.2.0 lässt sich in den Einstellungen unter „KI für die Textverarbeitung" zwischen **Online (OpenAI)** und **Eigener Server** umschalten. „Eigener Server" ist jeder OpenAI-kompatible Server, z. B. [LM Studio](https://lmstudio.ai) auf demselben Rechner (`http://localhost:1234/v1`). Dann laufen Blitzdiktat+, $%&!, :) und Protokoll ohne Internet und ohne API Key.
+
+Das Setup richtet das auf Wunsch gleich mit ein (Häkchen „LM Studio und das Sprachmodell Gemma 4 E2B herunterladen und einrichten"):
+
+- lädt LM Studio von der Adresse des Herstellers und installiert es, falls es noch fehlt,
+- lädt das Modell Gemma 4 E2B (3,4 GB, Apache 2.0) von Hugging Face in den Modellordner von LM Studio,
+- stellt Blitzdiktat auf „Eigener Server" mit diesem Modell.
+
+Beides wird beim Installieren heruntergeladen (zusammen ca. 4,1 GB) und per SHA-256 geprüft; im Setup selbst ist es nicht enthalten. Den Server von LM Studio startet Blitzdiktat bei Bedarf selbst.
+
+Lokale Modelle sind langsamer und machen mehr Fehler als OpenAI: auf dem Prozessor etwa 10–25 Sekunden je Diktat, ein Protokoll auch Minuten. Lokal erstellte Protokolle tragen deshalb einen Prüfhinweis.
+
 ## Gespeicherte Transkripte
 
 Alle Workflow-Ausgaben werden automatisch als `.txt`-Datei gespeichert:
@@ -122,6 +136,7 @@ Protokoll-Ausgaben werden zusätzlich als formatiertes `.pdf` im selben Ordner g
 Lokale Transkription:   Dein PC → faster-whisper auf dem Gerät (kein Netzwerk)
 Online-Transkription:   Dein PC → OpenAI Audio Transcriptions API
 Text-Rewriting:         Dein PC → OpenAI Chat Completions API
+Text-Rewriting lokal:   Dein PC → eigener Server, z. B. LM Studio auf dem Gerät (kein Netzwerk)
 ```
 
 Kein eigenes Backend. Der API Key liegt im Windows Credential Manager.

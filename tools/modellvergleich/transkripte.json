@@ -1,0 +1,42 @@
+{
+  "dampf/lieferant": {
+    "whisper": "small",
+    "sek": 14.7,
+    "text": "Also ich fass es nicht. Das ist jetzt das dritte Mal, dass der Lieferant den Termin verschiebt, ohne uns Bescheid zu sagen. Die haben uns für Montag die Server zugesagt, und heute, am Donnerstag, krieg ich eine Lapidare Mehl, das es noch zwei Wochen dauert. Das ist eine absolute Frechheit. Die halten uns doch für blöd. Ich habe hier drei Leute rumsitzen, die den Umzug machen sollten, und die kann ich jetzt nach Hause schicken. Wenn die das nicht bis nächsten Mittwoch liefern, dann können die ihren Auftrag vergessen. Und ich will eine Gutschrift für den ganzen Ehrge, sonst sehen die von uns keinen Cent mehr."
+  },
+  "dampf/ticket": {
+    "whisper": "small",
+    "sek": 10.9,
+    "text": "Mensch, ich krieg echt die Krise. Der Kollege Brandt aus dem Vertrieb hat schon wieder ein Ticket aufgemacht, mit dringend, geht nix, und dann steht da nichts drin. Kein Gerät, keine Fehlermeldung, gar nichts. Das ist jetzt das fünfte Mal diesen Monat. Ich bin doch nicht sein persönlicher Hellseher. Ich renne dann jedes Mal hinterher und ruf an, und dann ist er nicht erreichbar. So ein Kaut? Der soll gefälligst das Formular ausfüllen wie alle anderen auch, mit Gerätenname und Screenshot, sonst mache ich das Ticket einfach zu. Und er soll eine Rückrufnummer reinschreiben."
+  },
+  "dampf/heizung": {
+    "whisper": "small",
+    "sek": 9.5,
+    "text": "Jetzt reicht es mir aber wirklich. Die Heizung im Büro im zweiten Stock ist seit Montag kalt, wir sitzen hier bei 16 Grad mit Jacke am Schreibtisch. Ich habe der Hausverwaltung zweimal gemählt und einmal angerufen, und jedes Mal heißt es, der Techniker kommt morgen. Der kommt aber nie. Das ist doch ein Saftladen. Wenn bis Freitag keiner da war, dann bestelle ich selber einen Heizungsbauer und schicke denen die Rechnung, und die Miete kürze ich auch. Ich will einen festen Termin mit Uhrzeit, und zwar schriftlich."
+  },
+  "protokoll/bau": {
+    "whisper": "small",
+    "sek": 49.8,
+    "text": "So, dann fangen wir mal an. Guten Morgen zusammen. Frau Petersen von der Bauleitung, Herr Jelmasch vom Elektro und ich für die IT sind da. Herr Brandt vom Tiefbau hat abgesagt. Erster Punkt, Estrich in Halle 2. Frau Petersen, wie sieht es aus? Ja, leider nicht gut. Die Restfeuchte liegt aktuell bei 2,8 Prozent, wir brauchen unter 2,0, bevor der Bodenbelag rein kann. Das heißt, wir verlieren da eine Woche. Ich habe ein Angebot für zusätzliche Trocknungsgeräte eingeholt, das wären 1850 Euro netto für zwei Wochen. Dann würden wir die Woche wieder reinholen. Okay, das machen wir, das beauftragen wir so. Einverstanden? Dann beauftrage ich das heute noch. Zweiter Punkt, Elektro. Herr Jelmasch. Ja, also im Büro im Erdgesetz Eskepaus waren ursprünglich 12 Netzwerkdosen geplant. Nach der letzten Begehung brauchen wir 14, weil der Empfang zwei zusätzliche Arbeitsplätze bekommt. Das ist kein großer Aufwand, aber ich muss ein Nachtragsangebot schreiben. Das schicke ich bis nächsten Dienstag. Gut. Und die Lehrrohre für die Kameras an der Zufahrt, sind die drin. Die sind drin, ja, drei Stück bis zum Mast. Dritte Punkt, IT. Also der Glasfaserhausanschluss. Die Telekom hat den Termin bestätigt, das ist der 9. Dezember vor Mittags. Da muss jemand vor Ort sein, das übernehme ich. Dann zum Server-Schrank. Der war in Raum 0.12 geplant, da ist aber die Lüftung nicht ausreichend. Wir haben uns das angeschaut und nehmen stattdessen Raum 0.14, der ist größer und hat ein Fenster nach Norden. Frau Petersen, können Sie das im Plan ändern lassen? Ja, das gebe ich an den Architekten weiter, sollte bis Ende nächster Woche erledigt sein. Gut. Dann noch der Umzugstermin, der bleibt vorerst bei Mitte Dezember, wenn der Estrich mitspielt. Sonst reden wir beim nächsten Mal drüber. Gibt es noch was? Nein. Dann machen wir die nächste Besprechung in zwei Wochen, wieder Donnerstag, 9 Uhr, hier auf der Baustelle. Danke euch."
+  },
+  "protokoll/it": {
+    "whisper": "small",
+    "sek": 30.3,
+    "text": "Okay, dann legen wir los. Heute dabei sind Frau Lorenz, Herr Aydin und ich. Erstes Thema, die Umstellung auf Windows 11 der Herr Aydin, wie ist der Stand? Von den 86 Rechnern sind ein und 60 umgestellt, es fehlen also noch 25ste. Davon sind neun Geräte zu alt, die erfüllen die Anforderungen nicht und müssen ersetzt werden. Was kosten die? Ich habe ein Angebot, neun Notebooks zu je 1140 Euro netto, also 10.260 Euro. Gut, das bestellen wir, ich gebe das frei. Herr Aydin, bitte bestellen sie die Geräte bis Freitag. Die restlichen 16 Rechner stellen wir bis Ende Februar um. Zweites Thema, Datensicherung. Frau Lorenz, die Sicherung auf das NAS läuft seit letzter Woche wieder stabil. Der Fehler lag an einer vollen Festplatte, wir haben jetzt 40te Arbeit statt 4 und 20sten. Was noch fehlt, ist der Rücksicherungs-Test. Den mache ich übermorgen. Drittes Thema, die neue Telefonanlage. Der Anbieter hat den Umschalttermin verschoben, von nächsten Montag auf den 2 und 20sten Februar. Das ist ärgerlich, aber wir können nichts machen. Ich informiere morgen die Abteilungsleiter. Sonst noch was? Nein. Dann sehen wir uns in drei Wochen wieder, gleiche Tag, gleiche Zeit, 14 Uhr."
+  },
+  "protokoll/lager": {
+    "whisper": "small",
+    "sek": 13.8,
+    "text": "Kurze Abstimmung zum Jahresabschluss im Lager. Die Inventur ist für den 29. Dezember angesetzt, beginnt 7 Uhr. Wir zählen dieses Jahr mit den neuen Handscanners. Davon haben wir zwölf Stück, drei sind noch in der Reparatur und sollen nächste Woche mit Woche zurückkommen. Falls nicht, zählen zwei Teams wie bisher mit Listen. Das Hochregal in Halle 3 wird am Montag gesperrt, weil dort die Regalprüfung stattfindet. Der Prüfer braucht etwa vier Stunden. Bitte bis heute Abend alle Paletten aus Gang 7 umlagern. Die Zählergebnisse müssen bis zum 8. Januar in der Buchhaltung sein. Offen ist noch, wer die Nachzählung bei Differenzen über 500 Euro macht, das klären wir nach den Feiertagen."
+  },
+  "dampf/abrechnung": {
+    "whisper": "small",
+    "sek": 11.1,
+    "text": "Das darf doch nicht wahr sein. Die Buchhaltung hat mir zum zweiten Mal die Reisekostenabrechnung zurückgeschickt, diesmal weil angeblich ein Beleg fehlt. Der Beleg war aber dran, ich habe das Foto selbst hochgeladen. Ich warte seit sechs Wochen auf 412 Euro. Die sollen sich das Mal richtig angucken, statt alles einfach abzulehnen, diese Erbsenzähler. Ich will das Geld bis Ende der Woche auf dem Konto haben, und ich will wissen, wer das bearbeitet, damit ich nicht jedes Mal von vorne anfange."
+  },
+  "protokoll/messe": {
+    "whisper": "small",
+    "sek": 16.4,
+    "text": "Guten Tag zusammen, kurze Runde zum Messeauftritt. Anwesend sind Frau Schubert, Herr Nowak und Frau Demir. Die Messe ist vom 8. bis 10. Juni in Hannover. Der Stand hat 24 Quadratmeter und kostet 7.900 Euro, das sind 600 Euro mehr als letztes Jahr. Frau Schubert, wie weit sind die Prospekte? Der Entwurf ist fertig, die Druckerei braucht die Daten bis über nächste Woche Freitag, sonst wird es knapp. Gut? Herr Nowak, Sie geben den Entwurf bitte bis Montag frei. Dann die Hotelzimmer. Frau Demir hat fünf Zimmer reserviert, die Reservierung muss bis Ende April bestätigt werden? Das mache ich morgen. Wir haben außerdem beschlossen, dieses Jahr kein Gewinnspiel zu machen, der Aufwand war letztes Mal zu groß. Standpersonal, wir brauchen noch zwei Leute für den Donnerstag, Herr Nowak fragt im Vertrieb nach. Nächstes Treffen in vier Wochen, wieder Mittwoch um 10 Uhr."
+  }
+}

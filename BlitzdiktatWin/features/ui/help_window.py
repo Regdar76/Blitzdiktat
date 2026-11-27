@@ -54,7 +54,8 @@ class HelpWindow(ctk.CTkToplevel):
         self._h2(scroll, "🚀  Schnellstart")
         self._text(scroll,
             "1.  API Key hinterlegen (Einstellungen → OpenAI API Key) "
-            "— oder lokale Transkription aktivieren (kein API Key nötig).")
+            "— oder lokale Transkription aktivieren (kein API Key nötig). "
+            "Für die KI-Funktionen geht statt des API Keys auch ein eigener Server.")
         self._text(scroll,
             "2.  Mikrofon auswählen oder das Standard-Mikrofon des Systems nutzen.")
         self._text(scroll,
@@ -164,9 +165,31 @@ class HelpWindow(ctk.CTkToplevel):
 
         self._h3(scroll, "OpenAI API Key")
         self._text(scroll,
-            "Benötigt für alle Online-Funktionen: Online-Transkription, Blitzdiktat+, "
-            "Protokoll, Dampf ablassen, Emoji. Der Key wird sicher im "
+            "Benötigt für alle Online-Funktionen: Online-Transkription sowie Blitzdiktat+, "
+            "Protokoll, Dampf ablassen und Emoji, solange dafür OpenAI gewählt ist. Der Key wird sicher im "
             "Windows-Schlüsselspeicher (Keyring) gespeichert — nicht im Klartext.")
+
+        self._h3(scroll, "KI für die Textverarbeitung")
+        self._bullet(scroll,
+            "☁️  Online (OpenAI): beste Qualität und Antwort in 1–3 Sekunden, "
+            "benötigt API Key und Internetverbindung.")
+        self._bullet(scroll,
+            "🖥️  Eigener Server: ein OpenAI-kompatibler Server, z. B. LM Studio auf diesem "
+            "Rechner. Damit laufen Blitzdiktat+, $%&!, :) und Protokoll ohne Internet und "
+            "ohne API Key. Server-Adresse eintragen (Standard: http://localhost:1234/v1), "
+            "\"Verbinden und speichern\" klicken und ein Modell wählen.")
+        self._text(scroll,
+            "Das Setup kann die lokale KI gleich mit einrichten (Häkchen \"LM Studio und das "
+            "Sprachmodell Gemma 4 E2B herunterladen und einrichten\", etwa 4 GB Download). "
+            "Den Server von LM Studio startet Blitzdiktat dann bei Bedarf selbst – auch nach "
+            "einem Neustart des Rechners.")
+        self._text(scroll,
+            "Lokale Modelle sind langsamer und machen mehr Fehler als OpenAI: Auf dem "
+            "Prozessor dauert ein Diktat etwa 10–25 Sekunden, ein Protokoll auch Minuten. "
+            "Lokal erstellte Protokolle tragen deshalb einen Prüfhinweis.")
+        self._tip(scroll,
+            "Im Server ein Modell mit mindestens 8192 Tokens Kontextlänge laden. Erprobt "
+            "sind Gemma 4 E2B (schnell) und Gemma 4 E4B (gründlicher).")
 
         self._h3(scroll, "Sprache")
         self._text(scroll,
@@ -196,7 +219,8 @@ class HelpWindow(ctk.CTkToplevel):
         self._bullet(scroll,
             "Über \"Vokabular löschen\" in den Einstellungen kann die Liste zurückgesetzt werden")
         self._bullet(scroll,
-            "Funktioniert nur, wenn ein OpenAI API Key hinterlegt ist")
+            "Funktioniert nur, wenn ein OpenAI API Key hinterlegt oder ein eigener "
+            "KI-Server eingerichtet ist")
 
         self._h3(scroll, "Tastenkürzel")
         self._text(scroll,

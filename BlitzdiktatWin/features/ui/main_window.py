@@ -417,6 +417,8 @@ class MainWindow:
                     if backend == "local"
                     else "☁️ Online · OpenAI Whisper"
                 )
+                if self._app.settings.llm_provider == "custom":
+                    mode_text += " · KI: eigener Server"
                 self._status_label.configure(
                     text=mode_text,
                     text_color=("#22C55E" if backend == "local" else "#6B7280", "#9CA3AF"),

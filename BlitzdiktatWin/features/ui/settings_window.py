@@ -4,6 +4,7 @@ Settings window — equivalent to macOS SettingsContentView.
 Opens as a modal dialog from the main window.
 """
 
+import threading
 import tkinter as tk
 import customtkinter as ctk
 
@@ -168,6 +169,9 @@ class SettingsWindow(ctk.CTkToplevel):
             wraplength=440,
             justify="left",
         ).pack(anchor="w", pady=(2, 12))
+
+        # ---- KI-Anbieter für die Textverarbeitung -------------------
+        self._build_llm_provider_section(scroll, s)
 
         # ---- API Key -----------------------------------------------
         self._section(scroll, "OpenAI API Key")
@@ -394,6 +398,86 @@ class SettingsWindow(ctk.CTkToplevel):
             text_color=("#9CA3AF", "#6B7280"),
         ).pack(pady=(0, 8))
 
+    def _build_llm_provider_section(self, scroll, s) -> None:
+        """Umschalter: Textverarbeitung über OpenAI oder einen eigenen Server."""
+        from services import llm_service
+
+        self._section(scroll, "KI für die Textverarbeitung")
+        ctk.CTkLabel(
+            scroll,
+            text="Für Blitzdiktat+, Blitzdiktat $%&!, Blitzdiktat :), Protokoll "
+                 "und das gelernte Vokabular.",
+            font=ctk.CTkFont(size=11),
+            text_color=("#6B7280", "#9CA3AF"),
+            wraplength=440,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 4))
+
+        self._provider_var = ctk.StringVar(value=s.llm_provider)
+        for value, text in (
+            (llm_service.PROVIDER_OPENAI, "☁️  Online  —  OpenAI (API Key nötig)"),
+            (llm_service.PROVIDER_CUSTOM, "🖥️  Eigener Server  —  z. B. LM Studio (lokal, offline)"),
+        ):
+            row = ctk.CTkFrame(scroll, fg_color="transparent")
+            row.pack(fill="x", pady=1)
+            ctk.CTkRadioButton(
+                row, text=text, variable=self._provider_var, value=value,
+                command=self._on_provider_change,
+            ).pack(side="left")
+
+        ctk.CTkLabel(scroll, text="Server-Adresse").pack(anchor="w", pady=(8, 0))
+        self._custom_url_entry = ctk.CTkEntry(
+            scroll, width=400, placeholder_text=llm_service.DEFAULT_CUSTOM_BASE_URL,
+        )
+        self._custom_url_entry.insert(0, s.custom_llm_base_url)
+        self._custom_url_entry.pack(anchor="w", pady=(0, 6))
+
+        ctk.CTkLabel(scroll, text="Modell").pack(anchor="w")
+        self._custom_model_var = ctk.StringVar(value=s.custom_llm_model)
+        self._custom_model_box = ctk.CTkComboBox(
+            scroll,
+            values=[s.custom_llm_model] if s.custom_llm_model else [""],
+            variable=self._custom_model_var,
+            width=400,
+        )
+        self._custom_model_box.pack(anchor="w", pady=(0, 6))
+
+        ctk.CTkLabel(scroll, text="API Key des Servers (optional, LM Studio braucht keinen)").pack(anchor="w")
+        self._custom_key_entry = ctk.CTkEntry(scroll, show="•", width=400)
+        current_custom_key = credentials_service.load_custom_api_key() or ""
+        if current_custom_key:
+            self._custom_key_entry.insert(0, current_custom_key)
+        self._custom_key_entry.pack(anchor="w", pady=(0, 6))
+
+        self._custom_test_btn = ctk.CTkButton(
+            scroll,
+            text="Verbinden und speichern",
+            width=200,
+            command=self._connect_custom_server,
+        )
+        self._custom_test_btn.pack(anchor="w", pady=(0, 4))
+
+        self._custom_status = ctk.CTkLabel(
+            scroll,
+            text=self._custom_status_idle_text(),
+            font=ctk.CTkFont(size=11),
+            text_color=("#6B7280", "#9CA3AF"),
+            wraplength=440,
+            justify="left",
+        )
+        self._custom_status.pack(anchor="w")
+
+        ctk.CTkLabel(
+            scroll,
+            text="Tipp: Das Modell im Server mit mindestens 8192 Tokens Kontextlänge laden, "
+                 "sonst werden lange Protokolle abgeschnitten. Auf dem Prozessor dauert ein "
+                 "Diktat lokal etwa 10–25 Sekunden, ein Protokoll auch Minuten.",
+            font=ctk.CTkFont(size=10),
+            text_color=("#9CA3AF", "#6B7280"),
+            wraplength=440,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 12))
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -495,6 +579,107 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self._app.save_settings()
 
+    # ---- Eigener KI-Server ---------------------------------------------
+
+    def _custom_status_idle_text(self) -> str:
+        s = self._app.settings
+        if s.llm_provider != "custom":
+            return "Eigener Server ist nicht aktiv – die Textverarbeitung läuft über OpenAI."
+        if not s.custom_llm_model:
+            return "⚠️  Noch kein Modell gewählt: „Verbinden und speichern“ klicken."
+        return f"Aktiv: {s.custom_llm_model}"
+
+    def _on_provider_change(self) -> None:
+        self._app.settings.llm_provider = self._provider_var.get()
+        self._app.save_settings()
+        self._custom_status.configure(
+            text=self._custom_status_idle_text(), text_color=("#6B7280", "#9CA3AF"),
+        )
+
+    def _connect_custom_server(self) -> None:
+        """Fragt den Server nach seinen Modellen und speichert Adresse, Modell und Key."""
+        from services import llm_service
+
+        url = llm_service.normalize_base_url(self._custom_url_entry.get()) \
+            or llm_service.DEFAULT_CUSTOM_BASE_URL
+        key = self._custom_key_entry.get().strip()
+        self._custom_test_btn.configure(state="disabled")
+        self._custom_status.configure(
+            text="Verbinde … (startet LM Studio bei Bedarf, das kann eine Minute dauern)",
+            text_color=("#6B7280", "#9CA3AF"),
+        )
+        result: dict = {}
+
+        def work() -> None:
+            from services import local_server
+            try:
+                try:
+                    models = llm_service.list_models(url, key)
+                except Exception:
+                    # LM Studio auf diesem Rechner: Server selbst starten.
+                    if not local_server.ensure_running(url):
+                        raise
+                    models = llm_service.list_models(url, key)
+                result["models"] = models
+            except Exception as e:  # Anzeige übernimmt der Hauptthread
+                result["error"] = e
+
+        def poll() -> None:
+            if not self.winfo_exists():
+                return
+            if not result:
+                self.after(100, poll)
+                return
+            self._custom_test_btn.configure(state="normal")
+            self._custom_connect_done(url, key, result)
+
+        threading.Thread(target=work, daemon=True).start()
+        self.after(100, poll)
+
+    def _custom_connect_done(self, url: str, key: str, result: dict) -> None:
+        s = self._app.settings
+        # Adresse und Key auch bei Fehlschlag merken – der Server kann später starten.
+        s.custom_llm_base_url = url
+        self._custom_url_entry.delete(0, "end")
+        self._custom_url_entry.insert(0, url)
+        if key:
+            credentials_service.save_custom_api_key(key)
+        else:
+            credentials_service.delete_custom_api_key()
+
+        if "error" in result:
+            s.custom_llm_model = self._custom_model_var.get().strip()
+            self._app.save_settings()
+            self._custom_status.configure(
+                text="❌  Server nicht erreichbar – deshalb ist die Modell-Liste noch leer. "
+                     "Blitzdiktat konnte ihn auch nicht selbst starten. Server von Hand "
+                     "starten (LM Studio: Developer → Server starten) und erneut auf "
+                     "„Verbinden und speichern“ klicken.",
+                text_color="#EF4444",
+            )
+            return
+
+        models = result["models"]
+        chosen = self._custom_model_var.get().strip()
+        if models and chosen not in models:
+            chosen = models[0]
+        self._custom_model_box.configure(values=models or [""])
+        self._custom_model_var.set(chosen)
+        s.custom_llm_model = chosen
+        self._app.save_settings()
+        if not models:
+            self._custom_status.configure(
+                text="⚠️  Verbunden, aber der Server meldet kein Modell. Bitte dort eines laden.",
+                text_color="#F59E0B",
+            )
+            return
+        aktiv = "" if s.llm_provider == "custom" else "  (oben „Eigener Server“ wählen, um ihn zu nutzen)"
+        self._custom_status.configure(
+            text=f"✅  Verbunden – {len(models)} Modell{'e' if len(models) != 1 else ''} gefunden. "
+                 f"Gewählt: {chosen}{aktiv}",
+            text_color=("#16A34A", "#22C55E"),
+        )
+
     def _save_api_key(self) -> None:
         key = self._api_entry.get().strip()
         if key:
@@ -529,6 +714,15 @@ class SettingsWindow(ctk.CTkToplevel):
         s.dampf_ablassen.system_prompt = self._dampf_prompt.get("1.0", "end").strip()
         s.emoji_text.emoji_density = self._emoji_var.get()
         s.protokoll.system_prompt = self._protokoll_prompt.get("1.0", "end").strip()
+
+        # Eigener KI-Server: getippte Adresse/Modell auch ohne Verbindungstest übernehmen.
+        from services import llm_service
+        s.llm_provider = self._provider_var.get()
+        s.custom_llm_base_url = (
+            llm_service.normalize_base_url(self._custom_url_entry.get())
+            or llm_service.DEFAULT_CUSTOM_BASE_URL
+        )
+        s.custom_llm_model = self._custom_model_var.get().strip()
 
         # Kein Neustart nötig: save_settings() bindet die Hotkeys live neu,
         # alle übrigen Einstellungen werden beim nächsten Workflow-Start

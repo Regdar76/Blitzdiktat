@@ -6,7 +6,7 @@
 ; ============================================================================
 
 #define AppName      "Blitzdiktat"
-#define AppVersion   "2.1.9"
+#define AppVersion   "2.2.0"
 #define AppPublisher "Thorben Meier"
 #define AppURL       "https://github.com/Regdar76/Blitzdiktat"
 #define AppExeName   "Blitzdiktat.exe"
@@ -99,6 +99,10 @@ Filename: "taskkill.exe"; Parameters: "/f /im {#AppExeName}"; Flags: runhidden; 
 ; Audioaufnahmen sind sensibel und werden immer entfernt — sie liegen unter
 ; %LOCALAPPDATA%\Blitzdiktat\Audioaufnahmen (nicht {userappdata}\recordings)
 Type: filesandordirs; Name: "{localappdata}\Blitzdiktat\Audioaufnahmen"
+
+; Lokale KI (LM Studio + Gemma 4 E2B): eigener Baustein mit Aufgabe, Downloads
+; und Einrichtung. Muss vor dem [Code]-Abschnitt unten eingebunden werden.
+#include "installer_lokale_ki.iss"
 
 [Code]
 // ── Prüft ob das vorgebaute Whisper-Modell im Source-Verzeichnis vorhanden ist

@@ -3,7 +3,7 @@ setlocal EnableDelayedExpansion
 :: ============================================================================
 :: Blitzdiktat – Windows Installer Build Script
 ::
-:: Erstellt:  C:\Github\Setup Blitzdiktat 2.1.9.exe
+:: Erstellt:  C:\Github\Setup Blitzdiktat 2.2.0.exe
 ::
 :: Voraussetzungen (werden automatisch geprüft):
 ::   - Python 3.11+
@@ -171,8 +171,8 @@ echo  ==========================================
 echo   Build erfolgreich abgeschlossen!
 echo  ==========================================
 echo.
-if exist "C:\Github\Setup Blitzdiktat 2.1.9.exe" (
-    echo  Installer:    C:\Github\Setup Blitzdiktat 2.1.9.exe
+if exist "C:\Github\Setup Blitzdiktat 2.2.0.exe" (
+    echo  Installer:    C:\Github\Setup Blitzdiktat 2.2.0.exe
 )
 echo  Standalone:   dist\Blitzdiktat\Blitzdiktat.exe
 echo.

@@ -72,6 +72,14 @@ class AppSettings:
     openai_model_fast: str = ""
     openai_model_quality: str = ""
     openai_transcription_model: str = ""
+    # KI für die Textverarbeitung (Blitzdiktat+, $%&!, :), Protokoll, Vokabular):
+    # "openai" = OpenAI mit API Key, "custom" = eigener OpenAI-kompatibler
+    # Server, z. B. LM Studio auf diesem Rechner.
+    llm_provider: str = "openai"
+    custom_llm_base_url: str = "http://localhost:1234/v1"
+    custom_llm_model: str = ""
+    # Stilles "Nachdenken" lokaler Modelle abschalten (nur über settings.json).
+    custom_llm_disable_thinking: bool = True
     selected_microphone: str = ""           # "" = Systemstandard
     text_improvement: TextImprovementSettings = field(default_factory=TextImprovementSettings)
     dampf_ablassen: DampfAblassenSettings = field(default_factory=DampfAblassenSettings)
@@ -111,6 +119,12 @@ def _load_settings() -> AppSettings:
         s.openai_model_fast = data.get("openai_model_fast", s.openai_model_fast)
         s.openai_model_quality = data.get("openai_model_quality", s.openai_model_quality)
         s.openai_transcription_model = data.get("openai_transcription_model", s.openai_transcription_model)
+        s.llm_provider = data.get("llm_provider", s.llm_provider)
+        s.custom_llm_base_url = data.get("custom_llm_base_url", s.custom_llm_base_url)
+        s.custom_llm_model = data.get("custom_llm_model", s.custom_llm_model)
+        s.custom_llm_disable_thinking = bool(
+            data.get("custom_llm_disable_thinking", s.custom_llm_disable_thinking)
+        )
         s.selected_microphone = data.get("selected_microphone", s.selected_microphone)
         s.appearance_mode = data.get("appearance_mode", s.appearance_mode)
 
@@ -160,6 +174,10 @@ def _save_settings(s: AppSettings) -> None:
         "openai_model_fast": s.openai_model_fast,
         "openai_model_quality": s.openai_model_quality,
         "openai_transcription_model": s.openai_transcription_model,
+        "llm_provider": s.llm_provider,
+        "custom_llm_base_url": s.custom_llm_base_url,
+        "custom_llm_model": s.custom_llm_model,
+        "custom_llm_disable_thinking": s.custom_llm_disable_thinking,
         "selected_microphone": s.selected_microphone,
         "appearance_mode": s.appearance_mode,
         "text_improvement": asdict(s.text_improvement),
@@ -174,6 +192,38 @@ def _save_settings(s: AppSettings) -> None:
         pass
 
 
+LOCAL_AI_SETUP_FILE = "lokale_ki_einrichten.json"
+
+
+def _apply_local_ai_setup(s: AppSettings) -> bool:
+    """Übernimmt einmalig, was der Installer für die lokale KI eingerichtet hat.
+
+    Der Installer legt dazu eine kleine Datei neben settings.json ab (Anbieter,
+    Adresse, Modell). Sie wird beim nächsten Start übernommen und gelöscht.
+    """
+    path = os.path.join(os.path.dirname(_settings_path()), LOCAL_AI_SETUP_FILE)
+    if not os.path.exists(path):
+        return False
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        model = str(data.get("model", "")).strip()
+        if not model:
+            return False
+        s.llm_provider = "custom"
+        s.custom_llm_base_url = str(data.get("base_url", "")).strip() or s.custom_llm_base_url
+        s.custom_llm_model = model
+        _save_settings(s)
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
 # ------------------------------------------------------------------
 # AppState
 # ------------------------------------------------------------------
@@ -184,12 +234,17 @@ AppStateCallback = Callable[["AppState"], None]
 def _apply_model_overrides(s: AppSettings) -> None:
     from services import llm_service, transcription_service
     llm_service.set_models(s.openai_model_fast, s.openai_model_quality)
+    llm_service.configure_provider(
+        s.llm_provider, s.custom_llm_base_url, s.custom_llm_model,
+        s.custom_llm_disable_thinking,
+    )
     transcription_service.set_transcription_model(s.openai_transcription_model)
 
 
 class AppState:
     def __init__(self):
         self.settings: AppSettings = _load_settings()
+        _apply_local_ai_setup(self.settings)
         _apply_model_overrides(self.settings)
         self.active_workflow: BaseWorkflow | None = None
         self.hotkey_service = HotkeyService()
@@ -275,6 +330,17 @@ class AppState:
             self._notify()
             return
 
+        # Alle Funktionen außer dem reinen Diktat brauchen die Text-KI. Fehlt
+        # sie, vor der Aufnahme melden – sonst fiel es erst nach dem Sprechen
+        # auf und das Diktat war verloren.
+        if wtype != WorkflowType.TRANSCRIPTION:
+            from services import llm_service
+            problem = llm_service.config_problem()
+            if problem:
+                self.notification = problem
+                self._notify()
+                return
+
         self._stop_active()
 
         workflow: BaseWorkflow
@@ -337,7 +403,11 @@ class AppState:
             wf.stop()
 
     def import_file_for_protokoll(self, path: str) -> None:
-        if not self.is_configured:
+        from services import llm_service
+        problem = (None if self.is_configured else self.config_error) or llm_service.config_problem()
+        if problem:
+            self.notification = problem
+            self._notify()
             return
         self._stop_active()
         s = self.settings
@@ -459,13 +529,15 @@ class AppState:
                 args=(text,),
                 daemon=True,
             ).start()
-        # Vokabular-Extraktion nutzt die OpenAI-API. Beim reinen Blitzdiktat mit
-        # lokalem Backend darf nichts das Gerät verlassen — dort überspringen.
+        # Vokabular-Extraktion nutzt die Text-KI (OpenAI oder eigener Server).
+        # Beim reinen Blitzdiktat mit lokalem Backend darf nichts das Gerät
+        # verlassen — dort überspringen.
         is_fully_local = (
             wf_type == WorkflowType.TRANSCRIPTION
             and self.settings.transcription_backend == "local"
         )
-        if credentials_service.is_configured() and not is_fully_local:
+        from services import llm_service
+        if llm_service.is_available() and not is_fully_local:
             threading.Thread(
                 target=self._extract_vocabulary_bg,
                 args=(text,),
