@@ -71,6 +71,9 @@ Tastenkürzel gedrückt halten → sprechen → loslassen → Text wird transkri
 **Hauptfenster:**
 Workflow-Schaltfläche klicken → Aufnahme startet. Nochmals klicken → Aufnahme stoppt und Verarbeitung beginnt.
 
+**Blitzdiktat Notiz (Strg+Umschalt+N):**
+Der Text erscheint nicht im Zielfenster, sondern in einem kleinen Notiz-Fenster. Dort lässt sich weiter diktieren (hängt an), jeder beliebige Text einfügen (Strg+V oder „Einfügen"), mit „Verbessern", „Beruhigen" und „Emojis" überarbeiten (bei Markierung nur der markierte Teil, sonst der ganze Text) und mit ↶ zurücknehmen. „Kopieren" legt den Text in die Zwischenablage, „Exportieren" speichert ihn als Textdatei oder PDF. Der Entwurf bleibt bis zum nächsten Öffnen erhalten. Das Fenster öffnet sich auch über den Pfeil an der Kachel im Hauptfenster.
+
 ## Projektstruktur
 
 ```
@@ -117,6 +120,12 @@ Das Setup richtet das auf Wunsch gleich mit ein (Häkchen „LM Studio und das S
 - stellt Blitzdiktat auf „Eigener Server" mit diesem Modell.
 
 Beides wird beim Installieren heruntergeladen (zusammen ca. 4,1 GB) und per SHA-256 geprüft; im Setup selbst ist es nicht enthalten. Den Server von LM Studio startet Blitzdiktat bei Bedarf selbst.
+
+**Automatische Einrichtung:** Beim Start prüft Blitzdiktat selbst, ob die lokale KI bereit ist, und holt nach, was fehlt – ohne Zutun des Anwenders: Fehlt LM Studio, lädt es die feste Version (Prüfsumme geprüft) und installiert sie still. Dann wird der Server gestartet, die Hardware geprüft und das beste passende Modell gewählt. Fehlt dieses noch, arbeitet bis zum Download das schon vorhandene Modell weiter; danach wird umgeschaltet. Fortschritt und Fehler zeigt das Hauptfenster. Eine manuelle Wahl unter „Erweitert" schaltet die Automatik aus; „Automatisch einrichten" schaltet sie wieder ein. Ohne Zutun ändert die Automatik nichts, wenn die Textverarbeitung online über OpenAI läuft (Schlüssel hinterlegt) oder der Server auf einem anderen Rechner steht.
+
+**Hardware-Test und Modellwahl (unter „Erweitert"):** In den Einstellungen unter „KI für die Textverarbeitung" liest „Hardware prüfen und Modell empfehlen" Arbeitsspeicher, Prozessor und Grafikkarte aus und empfiehlt das beste Modell, das darauf noch flott läuft (Gemma 4 E2B, Gemma 4 E4B oder Qwen 3.5 9B). Fehlende Modelle lädt Blitzdiktat nach Rückfrage selbst herunter („Herunterladen und verwenden"). „Tempo messen" lässt jedes installierte Modell ein Beispiel-Diktat bearbeiten und wählt nach den echten Zeiten das beste vor.
+
+**Selbststart:** Läuft LM Studio nicht, startet Blitzdiktat den Server selbst: zuerst über `lms`, hilft das nicht, öffnet es LM Studio im Hintergrund und startet den Server dann erneut. Das gewählte Modell wird mit 8192 Tokens Kontextlänge geladen. Gelingt der Start nicht, nennt die Fehlermeldung den Grund.
 
 Lokale Modelle sind langsamer und machen mehr Fehler als OpenAI: auf dem Prozessor etwa 10–25 Sekunden je Diktat, ein Protokoll auch Minuten. Lokal erstellte Protokolle tragen deshalb einen Prüfhinweis.
 

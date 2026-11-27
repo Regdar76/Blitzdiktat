@@ -62,6 +62,10 @@ Source: "{#GemmaUrl}"; DestName: "{#GemmaFile}"; DestDir: "{#ModelDir}"; \
 [Code]
 var
   LMStudioTestDone: Boolean;
+  // Was schon vor diesem Setup da war – nur was das Setup selbst installiert,
+  // wird bei der Deinstallation wieder entfernt.
+  LMStudioPreExisting: Boolean;
+  GemmaPreExisting: Boolean;
 
 // ── Ist LM Studio schon installiert? ────────────────────────────────────────
 function LMStudioInstalled(): Boolean;
@@ -95,27 +99,85 @@ begin
   Result := not GemmaModelPresent();
 end;
 
-// ── Vor dem Start warnen, wenn der Platz knapp ist ──────────────────────────
-function NextButtonClick(CurPageID: Integer): Boolean;
+// ── Zu wenig Platz: lokale KI stillschweigend weglassen (keine Rückfrage) ───
+// Blitzdiktat selbst läuft auch ohne; die KI lässt sich später einrichten.
+procedure InitializeWizard();
 var
   FreeBytes, TotalBytes: Int64;
-  FreeGB: Integer;
 begin
-  Result := True;
-  if (CurPageID = wpSelectTasks) and WizardIsTaskSelected('localai') then
-  begin
-    if GetSpaceOnDisk64(ExpandConstant('{%USERPROFILE}'), FreeBytes, TotalBytes) then
+  LMStudioPreExisting := LMStudioInstalled();
+  GemmaPreExisting := GemmaModelPresent();
+  if GetSpaceOnDisk64(ExpandConstant('{%USERPROFILE}'), FreeBytes, TotalBytes) then
+    if FreeBytes < Int64(10) * 1073741824 then
     begin
-      FreeGB := FreeBytes div 1073741824;
-      if FreeGB < 10 then
-        Result := SuppressibleMsgBox(
-          'Für die lokale KI werden etwa 10 GB freier Speicher gebraucht ' +
-          '(während des Downloads kurzzeitig mehr als danach).' + #13#10 +
-          'Frei sind nur ' + IntToStr(FreeGB) + ' GB.' + #13#10#13#10 +
-          'Trotzdem fortfahren?',
-          mbConfirmation, MB_YESNO, IDYES) = IDYES;
+      WizardSelectTasks('!localai');
+      Log('Lokale KI: weniger als 10 GB frei, wird übersprungen.');
     end;
+end;
+
+// ── Was gehört Blitzdiktat? (Merkdatei neben der Vorgabe) ───────────────────
+function OwnershipFile(): String;
+begin
+  Result := ExpandConstant('{#MarkerDir}\lokale_ki_installiert.json');
+end;
+
+function Owns(Flag: String): Boolean;
+var
+  Content: AnsiString;
+begin
+  Result := LoadStringFromFile(OwnershipFile(), Content)
+            and (Pos('"' + Flag + '": true', String(Content)) > 0);
+end;
+
+function BoolText(Value: Boolean): String;
+begin
+  if Value then Result := 'true' else Result := 'false';
+end;
+
+// Merkt sich, was dieses Setup installiert hat. Ein früheres "true" bleibt
+// erhalten (bei Updates ist LM Studio dann schon da, gehört aber weiter uns).
+procedure RememberOwnership();
+begin
+  ForceDirectories(ExpandConstant('{#MarkerDir}'));
+  SaveStringToFile(OwnershipFile(),
+    '{"lmstudio": ' + BoolText(Owns('lmstudio') or (not LMStudioPreExisting)) +
+    ', "gemma": ' + BoolText(Owns('gemma') or (not GemmaPreExisting)) + '}',
+    False);
+end;
+
+// ── Deinstallation: lokale KI entfernen, soweit Blitzdiktat sie installiert hat
+procedure RemoveLocalAi();
+var
+  ResultCode: Integer;
+  AppDir, Uninstaller: String;
+begin
+  if Owns('lmstudio') then
+  begin
+    Exec('taskkill.exe', '/f /im "LM Studio.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('taskkill.exe', '/f /im lms.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    AppDir := ExpandConstant('{localappdata}\Programs\LM Studio');
+    Uninstaller := AppDir + '\Uninstall LM Studio.exe';
+    // "_?=" lässt den Uninstaller an Ort und Stelle laufen, damit wir auf ihn warten können.
+    if FileExists(Uninstaller) then
+      Exec(Uninstaller, '/currentuser /S _?=' + AppDir, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // Programm, Modelle (.lmstudio), Einstellungen, Updater, Verknüpfungen, Autostart.
+    DelTree(AppDir, True, True, True);
+    DelTree(ExpandConstant('{%USERPROFILE}\.lmstudio'), True, True, True);
+    DelTree(ExpandConstant('{userappdata}\LM Studio'), True, True, True);
+    DelTree(ExpandConstant('{localappdata}\lm-studio-updater'), True, True, True);
+    DeleteFile(ExpandConstant('{userdesktop}\LM Studio.lnk'));
+    DeleteFile(ExpandConstant('{userprograms}\LM Studio.lnk'));
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'electron.app.LM Studio');
+    Log('Lokale KI: LM Studio und Zubehör entfernt.');
+  end
+  else if Owns('gemma') then
+  begin
+    // LM Studio war vorher da: nur das von uns geladene Modell entfernen.
+    DelTree(ExpandConstant('{%USERPROFILE}\.lmstudio\models\lmstudio-community\gemma-4-E2B-it-GGUF'),
+            True, True, True);
+    Log('Lokale KI: Modell entfernt (LM Studio bleibt, es war schon vorher installiert).');
   end;
+  DeleteFile(OwnershipFile());
 end;
 
 // ── Nach dem Kopieren: LM Studio installieren, Vorgabe für die App ablegen ──
@@ -132,19 +194,28 @@ begin
 #else
     if not LMStudioInstalled() then
     begin
-      WizardForm.StatusLabel.Caption := 'LM Studio wird installiert …';
+      WizardForm.StatusLabel.Caption := 'Lokale KI wird eingerichtet …';
       WizardForm.FilenameLabel.Caption := '';
-      // Als der angemeldete Benutzer, nicht als Administrator: LM Studio
-      // installiert sich in das Benutzerprofil.
-      if not ExecAsOriginalUser(SetupFile, '/S', '', SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) then
+      // Als der angemeldete Benutzer (LM Studio installiert sich in das
+      // Benutzerprofil), ohne sichtbares Fenster.
+      if not ExecAsOriginalUser(SetupFile, '/S', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
         Log('LM Studio: Installer konnte nicht gestartet werden, Code ' + IntToStr(ResultCode))
       else
         Log('LM Studio: Installer beendet mit Code ' + IntToStr(ResultCode));
+      // Der Anwender soll von LM Studio nichts bemerken: ein vom Installer
+      // gestartetes Fenster schließen, die Desktop-Verknüpfung entfernen.
+      // (Nur hier, wo LM Studio gerade erst neu installiert wurde.)
+      Exec('taskkill.exe', '/f /im "LM Studio.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      DeleteFile(ExpandConstant('{userdesktop}\LM Studio.lnk'));
     end;
     DeleteFile(SetupFile);
     RemoveDir(ExpandConstant('{#LMSetupDir}'));
 #endif
   end;
+
+  // Merken, was wir installiert haben – auch wenn danach etwas schiefgeht,
+  // damit die Deinstallation nichts zurücklässt.
+  RememberOwnership();
 
   if GemmaModelPresent() and LMStudioInstalled() then
   begin
@@ -156,13 +227,7 @@ begin
     Log('Lokale KI: Vorgabe für Blitzdiktat abgelegt.');
   end
   else
-    SuppressibleMsgBox(
-      'Die lokale KI konnte nicht vollständig eingerichtet werden ' +
-      '(LM Studio oder das Sprachmodell fehlt).' + #13#10#13#10 +
-      'Blitzdiktat selbst ist installiert. Das Setup kann später noch einmal ' +
-      'gestartet werden, oder LM Studio wird von Hand eingerichtet: ' +
-      'Einstellungen → „KI für die Textverarbeitung“.',
-      mbInformation, MB_OK, IDOK);
+    Log('Lokale KI: LM Studio oder das Modell fehlt - nicht eingerichtet.');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

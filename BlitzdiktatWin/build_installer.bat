@@ -70,6 +70,7 @@ python -m pip install --upgrade ^
     customtkinter ^
     pywin32 ^
     faster-whisper ^
+    "av>=11,<19" ^
     httpx ^
     reportlab
 if errorlevel 1 (

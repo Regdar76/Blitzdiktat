@@ -12,7 +12,7 @@ import customtkinter as ctk
 
 from app_state import AppState
 from features.workflows.base_workflow import WorkflowPhase, WorkflowType
-from services import paste_service
+from services import local_ai_setup, paste_service
 from version import __version__
 from services.audio_recorder import recordings_dir
 from services.transcript_store import transcripts_dir
@@ -21,7 +21,7 @@ ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
 _WINDOW_W = 300
-_WINDOW_H = 600
+_WINDOW_H = 668
 _PAD = 12
 _BTN_H = 36          # inner button height (reduced; subtitle adds ~26 px per row)
 
@@ -60,8 +60,10 @@ class MainWindow:
         self._drag_x = 0
         self._drag_y = 0
 
+        self._note_window = None
         self._build_ui()
         app_state.subscribe(self._on_state_changed)
+        app_state.note_listener = self._on_note_text
 
         # Register own HWND so the foreground tracker ignores this window,
         # and start the tracker so button clicks find the correct target.
@@ -157,6 +159,7 @@ class MainWindow:
             (WorkflowType.DAMPF_ABLASSEN, "🔥"),
             (WorkflowType.EMOJI_TEXT,     "😊"),
             (WorkflowType.PROTOKOLL,      "📋"),
+            (WorkflowType.NOTIZ,          "📝"),
         ]:
             color = wtype.color
             hover = _lighten(color)
@@ -170,7 +173,7 @@ class MainWindow:
             container.pack(fill="x", pady=2)
 
             # Main button (transparent on the coloured frame)
-            if wtype == WorkflowType.PROTOKOLL:
+            if wtype in (WorkflowType.PROTOKOLL, WorkflowType.NOTIZ):
                 btn_row = ctk.CTkFrame(container, fg_color="transparent")
                 btn_row.pack(fill="x")
                 btn = ctk.CTkButton(
@@ -187,9 +190,9 @@ class MainWindow:
                     command=lambda t=wtype: self._on_workflow_click(t),
                 )
                 btn.pack(side="left", fill="x", expand=True)
-                self._import_btn = ctk.CTkButton(
+                side_btn = ctk.CTkButton(
                     btn_row,
-                    text="📂",
+                    text="📂" if wtype == WorkflowType.PROTOKOLL else "↗",
                     width=36,
                     height=_BTN_H,
                     fg_color="transparent",
@@ -198,9 +201,13 @@ class MainWindow:
                     text_color_disabled="#D0D0D0",
                     font=ctk.CTkFont(size=14),
                     corner_radius=8,
-                    command=self._on_import_click,
+                    command=(
+                        self._on_import_click if wtype == WorkflowType.PROTOKOLL else self._open_note
+                    ),
                 )
-                self._import_btn.pack(side="right", padx=(0, 4))
+                side_btn.pack(side="right", padx=(0, 4))
+                if wtype == WorkflowType.PROTOKOLL:
+                    self._import_btn = side_btn
             else:
                 btn = ctk.CTkButton(
                     container,
@@ -323,6 +330,7 @@ class MainWindow:
             WorkflowType.DAMPF_ABLASSEN: s.hotkey_dampf_ablassen,
             WorkflowType.EMOJI_TEXT:     s.hotkey_emoji_text,
             WorkflowType.PROTOKOLL:      s.hotkey_protokoll,
+            WorkflowType.NOTIZ:          s.hotkey_notiz,
         }.get(wtype, "")
         if hk_raw:
             hk = "+".join(p.capitalize() for p in hk_raw.split("+"))
@@ -370,6 +378,33 @@ class MainWindow:
 
     def _on_state_changed(self, state: AppState) -> None:
         self._root.after(0, self._update_ui)
+        self._root.after(0, self._update_note_window)
+
+    # ------------------------------------------------------------------
+    # Notiz-Fenster
+    # ------------------------------------------------------------------
+
+    def _get_note_window(self):
+        from features.ui.notiz_window import NotizWindow
+        if self._note_window is None or not self._note_window.winfo_exists():
+            self._note_window = NotizWindow(self._root, self._app)
+        return self._note_window
+
+    def _open_note(self) -> None:
+        self._get_note_window().show()
+
+    def _on_note_text(self, text: str) -> None:
+        """Diktierter Text der Notiz – kommt aus einem Hintergrund-Thread."""
+        self._root.after(0, lambda: self._get_note_window().append_dictation(text))
+
+    def _update_note_window(self) -> None:
+        wf = self._app.active_workflow
+        if wf and wf.workflow_type == WorkflowType.NOTIZ and wf.state.phase.is_active:
+            win = self._get_note_window()          # per Tastenkürzel: Fenster zeigen
+            if win.state() == "withdrawn":
+                win.show()
+        if self._note_window is not None and self._note_window.winfo_exists():
+            self._note_window.refresh()
 
     # ------------------------------------------------------------------
     # UI-Updates (immer im Main-Thread via root.after)
@@ -391,7 +426,7 @@ class MainWindow:
             )
         elif phase == WorkflowPhase.DONE:
             self._status_label.configure(
-                text="✅  Eingefügt",
+                text="✅  In der Notiz" if wf and wf.workflow_type == WorkflowType.NOTIZ else "✅  Eingefügt",
                 text_color="#22C55E",
             )
         elif phase == WorkflowPhase.ERROR:
@@ -402,6 +437,13 @@ class MainWindow:
             self._status_label.configure(
                 text=f"⚠️  {clean}" if clean else "⚠️  Unbekannter Fehler",
                 text_color="#EF4444",
+            )
+        elif local_ai_setup.status.state in (local_ai_setup.WORKING, local_ai_setup.FAILED):
+            working = local_ai_setup.status.state == local_ai_setup.WORKING
+            msg = local_ai_setup.status.message
+            self._status_label.configure(
+                text=("🧠  " if working else "⚠️  ") + (msg if len(msg) <= 90 else msg[:87] + "..."),
+                text_color="#F59E0B" if working else "#EF4444",
             )
         else:
             if not self._app.is_configured:
@@ -431,6 +473,7 @@ class MainWindow:
             WorkflowType.DAMPF_ABLASSEN: "🔥",
             WorkflowType.EMOJI_TEXT:     "😊",
             WorkflowType.PROTOKOLL:      "📋",
+            WorkflowType.NOTIZ:          "📝",
         }
         for wtype, btn in self._wf_buttons.items():
             label     = self._app.workflow_display_name(wtype)

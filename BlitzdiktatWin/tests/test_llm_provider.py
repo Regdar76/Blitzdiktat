@@ -16,8 +16,12 @@ def reset_provider(monkeypatch):
     # Kein Test darf den echten Windows-Schlüsselspeicher lesen.
     monkeypatch.setattr(llm_service, "load_api_key", lambda: None)
     monkeypatch.setattr(llm_service.credentials_service, "load_custom_api_key", lambda: None)
-    # ... und keiner darf LM Studio auf dem Rechner starten.
-    monkeypatch.setattr(llm_service.local_server, "ensure_running", lambda url: False)
+    # ... und keiner darf LM Studio auf dem Rechner ansprechen, starten oder laden.
+    ls = llm_service.local_server
+    monkeypatch.setattr(ls, "start_local_server", lambda url, wait=90.0, force=False: ls.StartResult(False))
+    monkeypatch.setattr(ls, "is_reachable", lambda url, timeout=1.5: False)
+    monkeypatch.setattr(ls, "ensure_model_loaded", lambda url, model: False)
+    monkeypatch.setattr(ls, "_last_reason", "")
     # Andere Tests erzeugen einen AppState, der die echten Einstellungen des
     # Rechners übernimmt – deshalb auch vorher auf den Standard zurücksetzen.
     llm_service.configure_provider()
@@ -176,11 +180,13 @@ def fake_client(monkeypatch):
 # Anfrage und Antwort nur nachgestellt: Je nach Version bringt das openai-Paket
 # "httpx" oder "httpx2" mit – die Tests sollen von beidem unabhängig sein.
 def _request():
-    return SimpleNamespace(method="POST", url="http://localhost:1234/v1/chat/completions")
+    return SimpleNamespace(method="POST", url="http://localhost:1234/v1/chat/completions", headers={})
 
 
 def _response(status_code: int):
-    return SimpleNamespace(status_code=status_code, request=_request(), headers={})
+    return SimpleNamespace(
+        status_code=status_code, request=_request(), headers={}, history=[], next_request=None,
+    )
 
 
 def test_eigener_server_bekommt_adresse_modell_und_denkmodus_aus(fake_client):
@@ -214,6 +220,32 @@ def test_nicht_erreichbarer_server_gibt_klare_meldung(fake_client):
         run(llm_service._complete("hallo", "sys", "x", 0.3))
 
 
+def test_nicht_erreichbarer_lokaler_server_nennt_den_grund(fake_client, monkeypatch):
+    monkeypatch.setattr(llm_service.local_server, "_last_reason", "LM Studio ist auf diesem Rechner nicht installiert.")
+    llm_service.configure_provider("custom", "localhost:1234", "gemma")
+    fake_client.failures = [APIConnectionError(request=_request())]
+    with pytest.raises(llm_service.LLMError, match="nicht installiert"):
+        run(llm_service._complete("hallo", "sys", "x", 0.3))
+
+
+def test_modell_wird_vor_der_anfrage_geladen_wenn_server_laeuft(fake_client, monkeypatch):
+    loaded: list[tuple[str, str]] = []
+    ls = llm_service.local_server
+    monkeypatch.setattr(ls, "is_reachable", lambda url, timeout=1.5: True)
+    monkeypatch.setattr(ls, "ensure_model_loaded", lambda url, model: loaded.append((url, model)) or True)
+    llm_service.configure_provider("custom", "localhost:1234", "gemma")
+    assert run(llm_service._complete("hallo", "sys", "x", 0.3)) == "Guten Tag,"
+    assert loaded == [("http://localhost:1234/v1", "gemma")]
+
+
+def test_fremder_server_wird_nie_per_lms_beladen(fake_client, monkeypatch):
+    ls = llm_service.local_server
+    monkeypatch.setattr(ls, "is_reachable", lambda url, timeout=1.5: True)
+    monkeypatch.setattr(ls, "ensure_model_loaded", lambda url, model: pytest.fail("darf nicht laden"))
+    llm_service.configure_provider("custom", "https://ki.firma.example/v1", "gemma")
+    assert run(llm_service._complete("hallo", "sys", "x", 0.3)) == "Guten Tag,"
+
+
 def test_nicht_erreichbarer_fremder_server_nennt_die_adresse(fake_client):
     llm_service.configure_provider("custom", "https://ki.firma.example/v1", "gemma")
     fake_client.failures = [APIConnectionError(request=_request())]
@@ -224,7 +256,8 @@ def test_nicht_erreichbarer_fremder_server_nennt_die_adresse(fake_client):
 def test_lokaler_server_wird_gestartet_und_die_anfrage_wiederholt(fake_client, monkeypatch):
     started: list[str] = []
     monkeypatch.setattr(
-        llm_service.local_server, "ensure_running", lambda url: started.append(url) or True,
+        llm_service.local_server, "start_local_server",
+        lambda url, wait=90.0, force=False: started.append(url) or llm_service.local_server.StartResult(True),
     )
     llm_service.configure_provider("custom", "localhost:1234", "gemma")
     fake_client.failures = [APIConnectionError(request=_request())]
@@ -236,7 +269,8 @@ def test_lokaler_server_wird_gestartet_und_die_anfrage_wiederholt(fake_client, m
 def test_zeitueberschreitung_startet_keinen_server(fake_client, monkeypatch):
     started: list[str] = []
     monkeypatch.setattr(
-        llm_service.local_server, "ensure_running", lambda url: started.append(url) or True,
+        llm_service.local_server, "start_local_server",
+        lambda url, wait=90.0, force=False: started.append(url) or llm_service.local_server.StartResult(True),
     )
     llm_service.configure_provider("custom", "localhost:1234", "gemma")
     fake_client.failures = [APITimeoutError(request=_request())]

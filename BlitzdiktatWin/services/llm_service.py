@@ -250,24 +250,33 @@ async def _complete_custom(messages: list[dict], temperature: float) -> str | No
                 # Server kennt den Parameter nicht → ohne ihn noch einmal.
                 return await client.chat.completions.create(**kwargs)
 
+    local = local_server.is_local_url(_custom_base_url)
     try:
         try:
+            if local and local_server.is_reachable(_custom_base_url):
+                # Modell mit ausreichender Kontextlänge bereitstellen (sonst lädt
+                # LM Studio es erst bei der Anfrage und mit kleinem Kontext).
+                await asyncio.to_thread(local_server.ensure_model_loaded, _custom_base_url, _custom_model)
             response = await request()
         except APITimeoutError:
             raise
         except APIConnectionError:
             # Läuft die KI auf diesem Rechner (LM Studio), ist nach einem
             # Neustart nur der Server aus → selbst starten, einmal wiederholen.
-            started = await asyncio.to_thread(local_server.ensure_running, _custom_base_url)
+            local_server.forget_loaded()
+            started = await asyncio.to_thread(local_server.start_local_server, _custom_base_url)
             if not started:
                 raise
+            await asyncio.to_thread(local_server.ensure_model_loaded, _custom_base_url, _custom_model)
             response = await request()
     except APITimeoutError as e:
         raise LLMError("Eigener KI-Server hat nicht rechtzeitig geantwortet (Zeitlimit 10 Minuten).") from e
     except APIConnectionError as e:
-        if local_server.is_local_url(_custom_base_url):
+        if local:
+            reason = local_server.last_reason()
             raise LLMError(
-                "Lokale KI nicht erreichbar. LM Studio einmal öffnen, dann erneut versuchen."
+                "Lokale KI nicht erreichbar" + (f": {reason}" if reason else ".")
+                + " Einstellungen → „Verbinden und speichern“ versucht es erneut."
             ) from e
         raise LLMError(
             f"Eigener KI-Server nicht erreichbar ({_custom_base_url[:60]}). Läuft er?"

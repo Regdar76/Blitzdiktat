@@ -8,4 +8,7 @@ keyring>=24.0.0
 customtkinter>=5.2.0
 pywin32>=312
 faster-whisper>=1.2.1
+# av 19 kennt "metadata_errors" nicht mehr, das faster-whisper beim Einlesen der Aufnahme
+# übergibt (Fehler: "open() got an unexpected keyword argument 'metadata_errors'").
+av>=11,<19
 reportlab>=5.0.0

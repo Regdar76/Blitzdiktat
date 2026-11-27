@@ -31,11 +31,17 @@ def main() -> None:
 
     # Läuft die Text-KI über LM Studio auf diesem Rechner, dessen Server schon
     # jetzt starten – sonst wartet das erste Diktat darauf.
-    if app_state.settings.llm_provider == "custom":
-        threading.Thread(
-            target=local_server.ensure_running,
-            args=(app_state.settings.custom_llm_base_url,), daemon=True,
-        ).start()
+    # Die Einrichtung übernimmt alles: LM Studio und Modell nachholen, Server starten,
+    # passendes Modell wählen. Ist sie aus (manuelle Wahl), bleibt es beim einfachen Start.
+    from services import local_ai_setup
+    if local_ai_setup.needs_local_ai(app_state.settings):
+        app_state.start_local_ai_setup()
+    elif app_state.settings.llm_provider == "custom":
+        def start_local_ai() -> None:
+            if local_server.ensure_running(app_state.settings.custom_llm_base_url):
+                app_state.heal_local_model()
+
+        threading.Thread(target=start_local_ai, daemon=True).start()
 
     main_window = MainWindow(app_state)
 

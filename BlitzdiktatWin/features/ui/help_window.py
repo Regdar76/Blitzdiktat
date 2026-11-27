@@ -34,6 +34,7 @@ class HelpWindow(ctk.CTkToplevel):
         hk_d  = getattr(s, "hotkey_dampf_ablassen",  "ctrl+shift+d") if s else "ctrl+shift+d"
         hk_e  = getattr(s, "hotkey_emoji_text",      "ctrl+shift+e") if s else "ctrl+shift+e"
         hk_p  = getattr(s, "hotkey_protokoll",       "ctrl+shift+p") if s else "ctrl+shift+p"
+        hk_n  = getattr(s, "hotkey_notiz",           "ctrl+shift+n") if s else "ctrl+shift+n"
 
         # ── Titel ──────────────────────────────────────────────────────
         ctk.CTkLabel(
@@ -112,6 +113,7 @@ class HelpWindow(ctk.CTkToplevel):
         # Protokoll
         self._h3(scroll, "📋  Blitzdiktat Protokoll  —  Meeting-Protokoll")
         self._hotkey_row(scroll, hk_p, "Aufnahme → Transkription → strukturiertes Protokoll")
+        self._hotkey_row(scroll, hk_n, "Notiz: diktieren oder Text einfügen, überarbeiten und kopieren")
         self._text(scroll,
             "Nimmt eine Besprechung auf — oder importiert eine externe Audio- bzw. Textdatei — "
             "und erstellt daraus ein strukturiertes Markdown-Protokoll: einleitende Zusammenfassung "

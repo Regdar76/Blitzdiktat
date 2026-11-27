@@ -13,6 +13,11 @@ from services import local_server
 @pytest.fixture(autouse=True)
 def reset(monkeypatch):
     monkeypatch.setattr(local_server, "_last_failure", 0.0)
+    monkeypatch.setattr(local_server, "_last_reason", "")
+    local_server.forget_loaded()
+    # Kein Test darf LM Studio auf diesem Rechner öffnen oder "lms" ausführen.
+    monkeypatch.setattr(local_server, "_launch_app", lambda app: pytest.fail("darf LM Studio nicht öffnen"))
+    monkeypatch.setattr(local_server, "run_lms", lambda *a, **k: pytest.fail("darf lms nicht ausführen"))
 
 
 @pytest.mark.parametrize("url, expected", [
@@ -55,10 +60,12 @@ def _free_port() -> int:
 def test_ohne_lm_studio_kein_start_und_keine_dauerschleife(monkeypatch):
     calls: list[int] = []
     monkeypatch.setattr(local_server, "find_lms", lambda: calls.append(1) or None)
+    monkeypatch.setattr(local_server, "find_app", lambda: None)
     url = f"http://127.0.0.1:{_free_port()}/v1"
     assert local_server.ensure_running(url) is False
     assert local_server.ensure_running(url) is False      # Pause nach Fehlversuch
     assert len(calls) == 1
+    assert "nicht installiert" in local_server.last_reason()
 
 
 def test_start_mit_richtigem_port(monkeypatch):
