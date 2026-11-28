@@ -104,6 +104,10 @@ class TrayApp:
                 f"📋  {self._app_state.workflow_display_name(WorkflowType.PROTOKOLL)}  [{s.hotkey_protokoll}]",
                 _action(WorkflowType.PROTOKOLL),
             ),
+            pystray.MenuItem(
+                f"📝  {self._app_state.workflow_display_name(WorkflowType.NOTIZ)}  [{s.hotkey_notiz}]",
+                _action(WorkflowType.NOTIZ),
+            ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("⚙️  Einstellungen", self._open_window),
             pystray.MenuItem("Beenden", self._quit),

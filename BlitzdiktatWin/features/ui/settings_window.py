@@ -4,6 +4,7 @@ Settings window — equivalent to macOS SettingsContentView.
 Opens as a modal dialog from the main window.
 """
 
+import threading
 import tkinter as tk
 import customtkinter as ctk
 
@@ -169,6 +170,9 @@ class SettingsWindow(ctk.CTkToplevel):
             justify="left",
         ).pack(anchor="w", pady=(2, 12))
 
+        # ---- KI-Anbieter für die Textverarbeitung -------------------
+        self._build_llm_provider_section(scroll, s)
+
         # ---- API Key -----------------------------------------------
         self._section(scroll, "OpenAI API Key")
 
@@ -253,13 +257,34 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         lang_menu.pack(anchor="w", pady=(0, 12))
 
+        # ---- Windows-Start ------------------------------------------
+        from services import autostart_service
+        self._section(scroll, "Windows-Start")
+        self._autostart_var = ctk.BooleanVar(value=autostart_service.is_enabled())
+        self._autostart_switch = ctk.CTkSwitch(
+            scroll, text="Blitzdiktat mit Windows starten",
+            variable=self._autostart_var, command=self._on_autostart_change,
+        )
+        self._autostart_switch.pack(anchor="w", pady=(0, 2))
+        if not autostart_service.is_supported():
+            self._autostart_switch.configure(state="disabled")
+        ctk.CTkLabel(
+            scroll,
+            text=("Damit die Tastenkürzel nach dem Hochfahren sofort funktionieren."
+                  if autostart_service.is_supported()
+                  else "Nur im installierten Programm verfügbar (nicht beim Start aus dem Quellcode)."),
+            font=ctk.CTkFont(size=11), text_color=("#6B7280", "#9CA3AF"), wraplength=440, justify="left",
+        ).pack(anchor="w", pady=(0, 12))
+
         # ---- Gelerntes Vokabular -----------------------------------
         from services import vocabulary_service
         self._section(scroll, "Gelerntes Vokabular")
         ctk.CTkLabel(
             scroll,
-            text="Automatisch gelernte Begriffe — ein Begriff pro Zeile. "
-                 "Direkt bearbeiten, manuell ergänzen oder einzelne Einträge löschen.",
+            text="Namen und Fachbegriffe in der richtigen Schreibweise — ein Begriff pro Zeile. "
+                 "Blitzdiktat schreibt sie nach jedem Diktat so, wie sie hier stehen "
+                 "(z. B. „Thorben“ statt „Torben“). Eine falsche Schreibweise einfach löschen; "
+                 "eigene Ersetzungen als „falsch -> richtig“ eintragen.",
             font=ctk.CTkFont(size=11),
             text_color=("#6B7280", "#9CA3AF"),
             wraplength=440,
@@ -267,7 +292,7 @@ class SettingsWindow(ctk.CTkToplevel):
         ).pack(anchor="w", pady=(0, 4))
 
         self._vocab_box = ctk.CTkTextbox(scroll, width=400, height=150)
-        self._vocab_box.insert("1.0", "\n".join(vocabulary_service.get_learned_terms()))
+        self._vocab_box.insert("1.0", "\n".join(vocabulary_service.user_lines()))
         self._vocab_box.pack(anchor="w", pady=(0, 6))
 
         _vocab_btn_row = ctk.CTkFrame(scroll, fg_color="transparent")
@@ -307,6 +332,9 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self._hk_protokoll = self._hotkey_row(
             scroll, "Blitzdiktat Protokoll", s.hotkey_protokoll
+        )
+        self._hk_notiz = self._hotkey_row(
+            scroll, "Blitzdiktat Notiz", s.hotkey_notiz
         )
 
         # ---- Text-Verbesserung -------------------------------------
@@ -394,6 +422,123 @@ class SettingsWindow(ctk.CTkToplevel):
             text_color=("#9CA3AF", "#6B7280"),
         ).pack(pady=(0, 8))
 
+    def _build_llm_provider_section(self, scroll, s) -> None:
+        """Umschalter: Textverarbeitung über OpenAI oder einen eigenen Server."""
+        from services import llm_service
+
+        self._section(scroll, "KI für die Textverarbeitung")
+        ctk.CTkLabel(
+            scroll,
+            text="Für Blitzdiktat+, Blitzdiktat $%&!, Blitzdiktat :), Protokoll "
+                 "und das gelernte Vokabular.",
+            font=ctk.CTkFont(size=11),
+            text_color=("#6B7280", "#9CA3AF"),
+            wraplength=440,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 4))
+
+        # Einfache Ansicht: Blitzdiktat richtet die lokale KI selbst ein. Alles
+        # Technische (Anbieter, Adresse, Modell, Schlüssel) steht unter "Erweitert".
+        self._auto_status = ctk.CTkLabel(
+            scroll, text=self._auto_status_text(), font=ctk.CTkFont(size=12),
+            wraplength=440, justify="left",
+        )
+        self._auto_status.pack(anchor="w", pady=(0, 4))
+        auto_row = ctk.CTkFrame(scroll, fg_color="transparent")
+        auto_row.pack(anchor="w", pady=(0, 4))
+        self._auto_btn = ctk.CTkButton(
+            auto_row, text="Automatisch einrichten", width=190, command=self._run_auto_setup,
+        )
+        self._auto_btn.pack(side="left", padx=(0, 6))
+        self._adv_toggle = ctk.CTkButton(
+            auto_row, text="Erweitert ▾", width=120, command=self._toggle_advanced,
+            fg_color="transparent", border_width=1,
+            border_color=("#D1D5DB", "#4B5563"), text_color=("#374151", "#D1D5DB"),
+        )
+        self._adv_toggle.pack(side="left")
+        self._adv = ctk.CTkFrame(scroll, fg_color="transparent")
+        self._adv_open = False
+        self._adv_was_opened = False
+        self._setup_was_busy = False
+        self._tick_auto_status()
+        scroll = self._adv          # alles Weitere gehört zur eingeklappten Ansicht
+
+        self._provider_var = ctk.StringVar(value=s.llm_provider)
+        for value, text in (
+            (llm_service.PROVIDER_OPENAI, "☁️  Online  —  OpenAI (API Key nötig)"),
+            (llm_service.PROVIDER_CUSTOM, "🖥️  Eigener Server  —  z. B. LM Studio (lokal, offline)"),
+        ):
+            row = ctk.CTkFrame(scroll, fg_color="transparent")
+            row.pack(fill="x", pady=1)
+            ctk.CTkRadioButton(
+                row, text=text, variable=self._provider_var, value=value,
+                command=self._on_provider_change,
+            ).pack(side="left")
+
+        ctk.CTkLabel(scroll, text="Server-Adresse").pack(anchor="w", pady=(8, 0))
+        self._custom_url_entry = ctk.CTkEntry(
+            scroll, width=400, placeholder_text=llm_service.DEFAULT_CUSTOM_BASE_URL,
+        )
+        self._custom_url_entry.insert(0, s.custom_llm_base_url)
+        self._custom_url_entry.pack(anchor="w", pady=(0, 6))
+
+        ctk.CTkLabel(scroll, text="Modell").pack(anchor="w")
+        self._custom_model_var = ctk.StringVar(value=s.custom_llm_model)
+        self._custom_model_box = ctk.CTkComboBox(
+            scroll,
+            values=[s.custom_llm_model] if s.custom_llm_model else [""],
+            variable=self._custom_model_var,
+            width=400,
+        )
+        self._custom_model_box.pack(anchor="w", pady=(0, 6))
+
+        ctk.CTkLabel(scroll, text="API Key des Servers (optional, LM Studio braucht keinen)").pack(anchor="w")
+        self._custom_key_entry = ctk.CTkEntry(scroll, show="•", width=400)
+        current_custom_key = credentials_service.load_custom_api_key() or ""
+        if current_custom_key:
+            self._custom_key_entry.insert(0, current_custom_key)
+        self._custom_key_entry.pack(anchor="w", pady=(0, 6))
+
+        self._custom_test_btn = ctk.CTkButton(
+            scroll,
+            text="Verbinden und speichern",
+            width=200,
+            command=self._connect_custom_server,
+        )
+        self._custom_test_btn.pack(anchor="w", pady=(0, 4))
+
+        self._custom_status = ctk.CTkLabel(
+            scroll,
+            text=self._custom_status_idle_text(),
+            font=ctk.CTkFont(size=11),
+            text_color=("#6B7280", "#9CA3AF"),
+            wraplength=440,
+            justify="left",
+        )
+        self._custom_status.pack(anchor="w")
+
+        from features.ui.local_ai_panel import LocalAiPanel
+        LocalAiPanel(
+            scroll, self._app,
+            get_url=lambda: llm_service.normalize_base_url(self._custom_url_entry.get())
+            or llm_service.DEFAULT_CUSTOM_BASE_URL,
+            get_key=lambda: self._custom_key_entry.get().strip(),
+            on_activate=self._activate_local_model,
+            on_models=self._set_model_choices,
+        ).pack(anchor="w", pady=(6, 0))
+        self._refresh_models_quietly()
+
+        ctk.CTkLabel(
+            scroll,
+            text="Hinweis: Blitzdiktat lädt das gewählte Modell mit 8192 Tokens Kontextlänge, "
+                 "damit lange Protokolle nicht abgeschnitten werden. Auf dem Prozessor dauert ein "
+                 "Diktat lokal etwa 10–25 Sekunden, ein Protokoll auch Minuten.",
+            font=ctk.CTkFont(size=10),
+            text_color=("#9CA3AF", "#6B7280"),
+            wraplength=440,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 12))
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -421,19 +566,24 @@ class SettingsWindow(ctk.CTkToplevel):
         from features.ui.help_window import HelpWindow
         HelpWindow(self, settings=self._app.settings)
 
+    def _on_autostart_change(self) -> None:
+        from services import autostart_service
+        wanted = bool(self._autostart_var.get())
+        if autostart_service.set_enabled(wanted):
+            self._show_toast("Startet mit Windows ✓" if wanted else "Startet nicht mehr mit Windows ✓")
+        else:
+            self._autostart_var.set(autostart_service.is_enabled())
+            self._show_toast("Autostart konnte nicht geändert werden")
+
     def _save_vocabulary(self) -> None:
         from services import vocabulary_service
         raw = self._vocab_box.get("1.0", "end").strip()
-        terms = [t.strip() for t in raw.splitlines() if t.strip()]
-        seen: set[str] = set()
-        unique: list[str] = []
-        for t in terms:
-            if t.lower() not in seen:
-                seen.add(t.lower())
-                unique.append(t)
-        vocabulary_service.clear()
-        vocabulary_service.add_terms(unique)
-        self._show_toast(f"{len(unique)} Begriff{'e' if len(unique) != 1 else ''} gespeichert ✓")
+        count, fixes = vocabulary_service.save_user_list(raw.splitlines())
+        # Liste neu anzeigen: gelöschte Varianten erscheinen jetzt als "falsch -> richtig".
+        self._vocab_box.delete("1.0", "end")
+        self._vocab_box.insert("1.0", "\n".join(vocabulary_service.user_lines()))
+        extra = f", {fixes} Korrektur{'en' if fixes != 1 else ''}" if fixes else ""
+        self._show_toast(f"{count} Begriff{'e' if count != 1 else ''}{extra} gespeichert ✓")
 
     def _clear_vocabulary(self) -> None:
         from services import vocabulary_service
@@ -495,6 +645,219 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self._app.save_settings()
 
+    # ---- Eigener KI-Server ---------------------------------------------
+
+    def _custom_status_idle_text(self) -> str:
+        s = self._app.settings
+        if s.llm_provider != "custom":
+            return "Eigener Server ist nicht aktiv – die Textverarbeitung läuft über OpenAI."
+        if not s.custom_llm_model:
+            return "⚠️  Noch kein Modell gewählt: „Verbinden und speichern“ klicken."
+        return f"Aktiv: {s.custom_llm_model}"
+
+    def _on_provider_change(self) -> None:
+        self._app.settings.llm_provider = self._provider_var.get()
+        self._app.settings.local_ai_auto = False      # manuelle Wahl: Automatik bleibt aus
+        self._app.save_settings()
+        self._custom_status.configure(
+            text=self._custom_status_idle_text(), text_color=("#6B7280", "#9CA3AF"),
+        )
+
+    def _connect_custom_server(self) -> None:
+        """Fragt den Server nach seinen Modellen und speichert Adresse, Modell und Key."""
+        from services import llm_service
+
+        url = llm_service.normalize_base_url(self._custom_url_entry.get()) \
+            or llm_service.DEFAULT_CUSTOM_BASE_URL
+        key = self._custom_key_entry.get().strip()
+        self._custom_test_btn.configure(state="disabled")
+        self._custom_status.configure(
+            text="Verbinde … (startet LM Studio bei Bedarf, das kann eine Minute dauern)",
+            text_color=("#6B7280", "#9CA3AF"),
+        )
+        result: dict = {}
+
+        def work() -> None:
+            from services import local_server
+            try:
+                try:
+                    models = llm_service.list_models(url, key)
+                except Exception:
+                    # LM Studio auf diesem Rechner: Server selbst starten
+                    # (auch wenn ein früherer Versuch gerade gescheitert ist).
+                    started = local_server.start_local_server(url, force=True)
+                    if not started.ok:
+                        result["reason"] = started.reason
+                        raise
+                    models = llm_service.list_models(url, key)
+                result["models"] = models
+            except Exception as e:  # Anzeige übernimmt der Hauptthread
+                result["error"] = e
+
+        def poll() -> None:
+            if not self.winfo_exists():
+                return
+            if not result:
+                self.after(100, poll)
+                return
+            self._custom_test_btn.configure(state="normal")
+            self._custom_connect_done(url, key, result)
+
+        threading.Thread(target=work, daemon=True).start()
+        self.after(100, poll)
+
+    def _auto_status_text(self) -> str:
+        from services import local_ai_setup
+        s = self._app.settings
+        st = local_ai_setup.status
+        if st.state == local_ai_setup.WORKING:
+            return f"⏳  {st.message}"
+        if st.state == local_ai_setup.FAILED:
+            return f"⚠️  {st.message}"
+        if s.llm_provider != "custom":
+            return "☁️  Die Textverarbeitung läuft online über OpenAI."
+        if not s.local_ai_auto:
+            return (f"🛠️  Manuell eingestellt: {s.custom_llm_model or 'kein Modell'}. "
+                    "„Automatisch einrichten“ übergibt wieder an Blitzdiktat.")
+        if st.state == local_ai_setup.READY:
+            return f"✅  {st.message}"
+        return f"🖥️  Lokale KI wird automatisch verwaltet ({s.custom_llm_model or 'noch kein Modell'})."
+
+    def _tick_auto_status(self) -> None:
+        """Hält die Statuszeile aktuell und sperrt die KI-Einstellungen, solange die Einrichtung läuft."""
+        if not self.winfo_exists():
+            return
+        busy = self._app.setup_busy() is not None
+        self._auto_status.configure(text=self._auto_status_text())
+        state = "disabled" if busy else "normal"
+        self._auto_btn.configure(state=state)
+        self._adv_toggle.configure(state=state)
+        if busy and self._adv_open:
+            self._toggle_advanced()                  # Modellauswahl erst nach der Einrichtung
+        if self._setup_was_busy and not busy:
+            self._refresh_models_quietly()           # fertig: Modelle stehen jetzt zur Wahl
+        self._setup_was_busy = busy
+        self.after(500, self._tick_auto_status)
+
+    def _run_auto_setup(self) -> None:
+        self._app.settings.local_ai_auto = True
+        self._app.save_ai_settings()
+        self._app.start_local_ai_setup(force=True)
+        self._auto_status.configure(text="⏳  Prüfe die lokale KI …")
+
+    def _toggle_advanced(self) -> None:
+        self._adv_open = not self._adv_open
+        if self._adv_open:
+            self._adv_was_opened = True
+            self._adv.pack(anchor="w", fill="x", after=self._adv_toggle.master)
+            self._adv_toggle.configure(text="Erweitert ▴")
+        else:
+            self._adv.pack_forget()
+            self._adv_toggle.configure(text="Erweitert ▾")
+
+    def _set_model_choices(self, names: list[str]) -> None:
+        """Trägt die Modelle des Servers in die Auswahlliste ein."""
+        if names:
+            self._custom_model_box.configure(values=names)
+
+    def _activate_local_model(self, model_id: str) -> None:
+        """Schaltet die Textverarbeitung auf das gewählte Modell des eigenen Servers."""
+        from services import llm_service
+        s = self._app.settings
+        s.llm_provider = llm_service.PROVIDER_CUSTOM
+        s.custom_llm_model = model_id
+        s.local_ai_auto = False                  # manuelle Wahl: Automatik bleibt aus
+        s.custom_llm_base_url = llm_service.normalize_base_url(self._custom_url_entry.get()) \
+            or llm_service.DEFAULT_CUSTOM_BASE_URL
+        self._provider_var.set(llm_service.PROVIDER_CUSTOM)
+        self._custom_model_var.set(model_id)
+        self._app.save_settings()
+        self._custom_status.configure(
+            text=self._custom_status_idle_text(), text_color=("#6B7280", "#9CA3AF"),
+        )
+
+    def _refresh_models_quietly(self) -> None:
+        """Füllt die Modellliste beim Öffnen – ohne den Server zu starten oder Meldungen."""
+        if self._app.settings.llm_provider != "custom":
+            return
+        from services import llm_service
+        url = self._app.settings.custom_llm_base_url
+        key = credentials_service.load_custom_api_key() or ""
+        result: dict = {}
+
+        def work() -> None:
+            try:
+                result["models"] = llm_service.list_models(url, key, timeout=3)
+            except Exception:
+                result["models"] = []
+
+        def poll() -> None:
+            if not self.winfo_exists():
+                return
+            if "models" not in result:
+                self.after(200, poll)
+                return
+            self._set_model_choices(result["models"])
+            if self._app.heal_local_model(result["models"]):
+                self._custom_model_var.set(self._app.settings.custom_llm_model)
+                self._custom_status.configure(
+                    text=self._custom_status_idle_text(), text_color=("#6B7280", "#9CA3AF"),
+                )
+
+        threading.Thread(target=work, daemon=True).start()
+        self.after(200, poll)
+
+    def _custom_connect_done(self, url: str, key: str, result: dict) -> None:
+        s = self._app.settings
+        # Adresse und Key auch bei Fehlschlag merken – der Server kann später starten.
+        s.custom_llm_base_url = url
+        s.local_ai_auto = False                  # manuelle Wahl: Automatik bleibt aus
+        self._custom_url_entry.delete(0, "end")
+        self._custom_url_entry.insert(0, url)
+        if key:
+            credentials_service.save_custom_api_key(key)
+        else:
+            credentials_service.delete_custom_api_key()
+
+        if "error" in result:
+            s.custom_llm_model = self._custom_model_var.get().strip()
+            self._app.save_settings()
+            reason = result.get("reason", "")
+            self._custom_status.configure(
+                text="❌  Server nicht erreichbar" + (f": {reason}" if reason else ".")
+                     + " Die Modell-Liste ist deshalb noch leer. Blitzdiktat versucht den "
+                       "Start bei jedem Diktat erneut; hilft das nicht, in LM Studio unter "
+                       "„Developer“ den Server einschalten.",
+                text_color="#EF4444",
+            )
+            return
+
+        models = result["models"]
+        chosen = self._custom_model_var.get().strip()
+        from services import model_catalog
+        chosen = model_catalog.resolve_model(chosen, models) or chosen
+        if models and chosen not in models:
+            chosen = models[0]
+        self._custom_model_box.configure(values=models or [""])
+        self._custom_model_var.set(chosen)
+        s.custom_llm_model = chosen
+        self._app.save_settings()
+        if not models:
+            self._custom_status.configure(
+                text="⚠️  Verbunden, aber der Server meldet kein Modell. Bitte dort eines laden.",
+                text_color="#F59E0B",
+            )
+            return
+        aktiv = "" if s.llm_provider == "custom" else "  (oben „Eigener Server“ wählen, um ihn zu nutzen)"
+        from services import local_server
+        if url.lower().startswith("http://") and not local_server.is_local_url(url):
+            aktiv += "  ⚠️ Unverschlüsselt (http): Diktate und Schlüssel gehen im Klartext an diesen Server."
+        self._custom_status.configure(
+            text=f"✅  Verbunden – {len(models)} Modell{'e' if len(models) != 1 else ''} gefunden. "
+                 f"Gewählt: {chosen}{aktiv}",
+            text_color=("#16A34A", "#22C55E"),
+        )
+
     def _save_api_key(self) -> None:
         key = self._api_entry.get().strip()
         if key:
@@ -514,6 +877,7 @@ class SettingsWindow(ctk.CTkToplevel):
         s.hotkey_dampf_ablassen = self._hk_dampf.get().strip()
         s.hotkey_emoji_text = self._hk_emoji.get().strip()
         s.hotkey_protokoll = self._hk_protokoll.get().strip()
+        s.hotkey_notiz = self._hk_notiz.get().strip()
 
         s.text_improvement.tone = self._tone_var.get()
         s.text_improvement.context = self._context_entry.get().strip()
@@ -529,6 +893,18 @@ class SettingsWindow(ctk.CTkToplevel):
         s.dampf_ablassen.system_prompt = self._dampf_prompt.get("1.0", "end").strip()
         s.emoji_text.emoji_density = self._emoji_var.get()
         s.protokoll.system_prompt = self._protokoll_prompt.get("1.0", "end").strip()
+
+        # Eigener KI-Server: getippte Adresse/Modell auch ohne Verbindungstest übernehmen –
+        # aber nur, wenn "Erweitert" geöffnet wurde. Sonst überschrieben die beim Öffnen des
+        # Fensters eingelesenen Werte das, was die automatische Einrichtung inzwischen gesetzt hat.
+        if self._adv_was_opened:
+            from services import llm_service
+            s.llm_provider = self._provider_var.get()
+            s.custom_llm_base_url = (
+                llm_service.normalize_base_url(self._custom_url_entry.get())
+                or llm_service.DEFAULT_CUSTOM_BASE_URL
+            )
+            s.custom_llm_model = self._custom_model_var.get().strip()
 
         # Kein Neustart nötig: save_settings() bindet die Hotkeys live neu,
         # alle übrigen Einstellungen werden beim nächsten Workflow-Start

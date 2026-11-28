@@ -24,6 +24,10 @@ def test_roundtrip_erhaelt_alle_werte():
     s.openai_model_fast = "gpt-4.1-mini"
     s.openai_model_quality = "gpt-4.1"
     s.openai_transcription_model = "whisper-1"
+    s.llm_provider = "custom"
+    s.custom_llm_base_url = "http://192.168.1.20:8080/v1"
+    s.custom_llm_model = "gemma-4-e2b-it"
+    s.custom_llm_disable_thinking = False
     s.text_improvement.tone = "formal"
     s.text_improvement.custom_terms = ["Karstens", "Blitzdiktat"]
     s.emoji_text.emoji_density = "viel"
@@ -50,3 +54,16 @@ def test_unbekannte_felder_werden_ignoriert(tmp_path):
         json.dump({"language": "en", "zukunfts_feature": True}, f)
     s = _load_settings()
     assert s.language == "en"
+
+def test_alte_settings_ohne_ki_anbieter_bleiben_bei_openai(tmp_path):
+    import json
+    import os
+    folder = os.path.join(str(tmp_path), "Blitzdiktat")
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, "settings.json"), "w", encoding="utf-8") as f:
+        json.dump({"language": "de", "openai_model_fast": "gpt-4.1-mini"}, f)
+    s = _load_settings()
+    assert s.llm_provider == "openai"
+    assert s.custom_llm_base_url == "http://localhost:1234/v1"
+    assert s.custom_llm_model == ""
+    assert s.custom_llm_disable_thinking is True

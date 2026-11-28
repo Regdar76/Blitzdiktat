@@ -33,3 +33,27 @@ def test_transcription_model_override():
     assert transcription_service._transcription_model == "gpt-4o-transcribe"
     transcription_service.set_transcription_model("")
     assert transcription_service._transcription_model == transcription_service.DEFAULT_TRANSCRIPTION_MODEL
+
+
+# ── Umbenanntes Modell im eigenen Server ────────────────────────────────────
+
+def test_veralteter_modellname_wird_automatisch_angepasst(monkeypatch):
+    import app_state
+    state = app_state.AppState.__new__(app_state.AppState)
+    state.settings = app_state.AppSettings()
+    state.settings.llm_provider = "custom"
+    state.settings.custom_llm_model = "gemma-4-e2b-it"
+    saved: list[str] = []
+    monkeypatch.setattr(app_state.AppState, "save_ai_settings", lambda self: saved.append(self.settings.custom_llm_model))
+    assert state.heal_local_model(["google/gemma-4-e2b", "text-embedding-x"]) is True
+    assert state.settings.custom_llm_model == "google/gemma-4-e2b" and saved == ["google/gemma-4-e2b"]
+    assert state.heal_local_model(["google/gemma-4-e2b"]) is False        # nichts mehr zu tun
+
+
+def test_openai_einstellung_bleibt_beim_heilen_unberuehrt(monkeypatch):
+    import app_state
+    state = app_state.AppState.__new__(app_state.AppState)
+    state.settings = app_state.AppSettings()
+    state.settings.custom_llm_model = "gemma-4-e2b-it"            # Anbieter bleibt "openai"
+    assert state.heal_local_model(["google/gemma-4-e2b"]) is False
+    assert state.settings.custom_llm_model == "gemma-4-e2b-it"

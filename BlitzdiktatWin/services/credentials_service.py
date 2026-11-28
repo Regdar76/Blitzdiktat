@@ -3,6 +3,7 @@ import keyring
 
 _SERVICE = "BlitzdiktatWin"
 _OPENAI_KEY = "openai_api_key"
+_CUSTOM_KEY = "custom_llm_api_key"
 
 
 def save_api_key(api_key: str) -> None:
@@ -23,6 +24,27 @@ def delete_api_key() -> None:
 def is_configured() -> bool:
     key = load_api_key()
     return bool(key and key.strip())
+
+
+# ── Eigener KI-Server (optional) ────────────────────────────────────────────
+# LM Studio braucht keinen Key; andere OpenAI-kompatible Server oft schon.
+
+def save_custom_api_key(api_key: str) -> None:
+    keyring.set_password(_SERVICE, _CUSTOM_KEY, api_key)
+
+
+def load_custom_api_key() -> str | None:
+    try:
+        return keyring.get_password(_SERVICE, _CUSTOM_KEY)
+    except Exception:
+        return None
+
+
+def delete_custom_api_key() -> None:
+    try:
+        keyring.delete_password(_SERVICE, _CUSTOM_KEY)
+    except Exception:
+        pass
 
 
 def masked_display(key: str) -> str:

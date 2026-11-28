@@ -11,11 +11,12 @@ import threading
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Any
 
-from features.workflows.base_workflow import BaseWorkflow, WorkflowState, WorkflowType
+from features.workflows.base_workflow import BaseWorkflow, WorkflowPhase, WorkflowState, WorkflowType
 from features.workflows.transcription_workflow import TranscriptionWorkflow
 from features.workflows.text_improvement_workflow import TextImprovementWorkflow
 from features.workflows.dampf_ablassen_workflow import DampfAblassenWorkflow
 from features.workflows.emoji_text_workflow import EmojiTextWorkflow
+from features.workflows.notiz_workflow import NotizWorkflow
 from features.workflows.protokoll_workflow import ProtokollWorkflow
 from services.hotkey_service import HotkeyService
 from services import credentials_service, paste_service, vocabulary_service
@@ -64,6 +65,7 @@ class AppSettings:
     hotkey_dampf_ablassen: str = "ctrl+shift+d"
     hotkey_emoji_text: str = "ctrl+shift+e"
     hotkey_protokoll: str = "ctrl+shift+p"
+    hotkey_notiz: str = "ctrl+shift+n"
     appearance_mode: str = "System"         # "System" | "Light" | "Dark"
     transcription_backend: str = "local"    # "online" | "local"
     local_whisper_model: str = "small"
@@ -72,6 +74,17 @@ class AppSettings:
     openai_model_fast: str = ""
     openai_model_quality: str = ""
     openai_transcription_model: str = ""
+    # KI für die Textverarbeitung (Blitzdiktat+, $%&!, :), Protokoll, Vokabular):
+    # "openai" = OpenAI mit API Key, "custom" = eigener OpenAI-kompatibler
+    # Server, z. B. LM Studio auf diesem Rechner.
+    llm_provider: str = "openai"
+    custom_llm_base_url: str = "http://localhost:1234/v1"
+    custom_llm_model: str = ""
+    # Stilles "Nachdenken" lokaler Modelle abschalten (nur über settings.json).
+    custom_llm_disable_thinking: bool = True
+    # Lokale KI automatisch einrichten und das zur Hardware passende Modell wählen
+    # (siehe services/local_ai_setup). Eine manuelle Wahl in den Einstellungen schaltet es aus.
+    local_ai_auto: bool = True
     selected_microphone: str = ""           # "" = Systemstandard
     text_improvement: TextImprovementSettings = field(default_factory=TextImprovementSettings)
     dampf_ablassen: DampfAblassenSettings = field(default_factory=DampfAblassenSettings)
@@ -90,6 +103,21 @@ def _settings_path() -> str:
     return os.path.join(folder, "settings.json")
 
 
+# True, wenn settings.json beim Start nicht lesbar war (die App meldet das dem Nutzer).
+LOAD_PROBLEM = False
+_SAVE_LOCK = threading.Lock()
+
+
+def _keep_broken_settings(path: str) -> None:
+    """Hebt eine unlesbare settings.json auf, bevor sie mit Standardwerten überschrieben wird."""
+    global LOAD_PROBLEM
+    LOAD_PROBLEM = True
+    try:
+        os.replace(path, path + ".defekt")
+    except OSError:
+        pass
+
+
 def _load_settings() -> AppSettings:
     path = _settings_path()
     if not os.path.exists(path):
@@ -97,6 +125,8 @@ def _load_settings() -> AppSettings:
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError("settings.json enthält kein Objekt")
         s = AppSettings()
         s.language = data.get("language", s.language)
         s.has_seen_onboarding = data.get("has_seen_onboarding", s.has_seen_onboarding)
@@ -106,42 +136,52 @@ def _load_settings() -> AppSettings:
         s.hotkey_dampf_ablassen = data.get("hotkey_dampf_ablassen", s.hotkey_dampf_ablassen)
         s.hotkey_emoji_text = data.get("hotkey_emoji_text", s.hotkey_emoji_text)
         s.hotkey_protokoll = data.get("hotkey_protokoll", s.hotkey_protokoll)
+        s.hotkey_notiz = data.get("hotkey_notiz", s.hotkey_notiz)
         s.transcription_backend = data.get("transcription_backend", s.transcription_backend)
         s.local_whisper_model = data.get("local_whisper_model", s.local_whisper_model)
         s.openai_model_fast = data.get("openai_model_fast", s.openai_model_fast)
         s.openai_model_quality = data.get("openai_model_quality", s.openai_model_quality)
         s.openai_transcription_model = data.get("openai_transcription_model", s.openai_transcription_model)
+        s.llm_provider = data.get("llm_provider", s.llm_provider)
+        s.custom_llm_base_url = data.get("custom_llm_base_url", s.custom_llm_base_url)
+        s.custom_llm_model = data.get("custom_llm_model", s.custom_llm_model)
+        s.custom_llm_disable_thinking = bool(
+            data.get("custom_llm_disable_thinking", s.custom_llm_disable_thinking)
+        )
+        s.local_ai_auto = bool(data.get("local_ai_auto", s.local_ai_auto))
         s.selected_microphone = data.get("selected_microphone", s.selected_microphone)
         s.appearance_mode = data.get("appearance_mode", s.appearance_mode)
 
-        ti = data.get("text_improvement", {})
+        ti = data.get("text_improvement") or {}
+        terms = ti.get("custom_terms") or []
         s.text_improvement = TextImprovementSettings(
             system_prompt=ti.get("system_prompt", ""),
-            custom_terms=ti.get("custom_terms", []),
+            custom_terms=[str(t) for t in terms if str(t).strip()] if isinstance(terms, list) else [],
             context=ti.get("context", ""),
             tone=ti.get("tone", "neutral"),
             custom_name=ti.get("custom_name", ""),
         )
 
-        da = data.get("dampf_ablassen", {})
+        da = data.get("dampf_ablassen") or {}
         s.dampf_ablassen = DampfAblassenSettings(
             system_prompt=da.get("system_prompt", ""),
             custom_name=da.get("custom_name", ""),
         )
 
-        et = data.get("emoji_text", {})
+        et = data.get("emoji_text") or {}
         s.emoji_text = EmojiTextSettings(
             emoji_density=et.get("emoji_density", "mittel"),
             custom_name=et.get("custom_name", ""),
         )
 
-        pr = data.get("protokoll", {})
+        pr = data.get("protokoll") or {}
         s.protokoll = ProtokollSettings(
             system_prompt=pr.get("system_prompt", ""),
             custom_name=pr.get("custom_name", ""),
         )
         return s
     except Exception:
+        _keep_broken_settings(path)
         return AppSettings()
 
 
@@ -155,11 +195,17 @@ def _save_settings(s: AppSettings) -> None:
         "hotkey_dampf_ablassen": s.hotkey_dampf_ablassen,
         "hotkey_emoji_text": s.hotkey_emoji_text,
         "hotkey_protokoll": s.hotkey_protokoll,
+        "hotkey_notiz": s.hotkey_notiz,
         "transcription_backend": s.transcription_backend,
         "local_whisper_model": s.local_whisper_model,
         "openai_model_fast": s.openai_model_fast,
         "openai_model_quality": s.openai_model_quality,
         "openai_transcription_model": s.openai_transcription_model,
+        "llm_provider": s.llm_provider,
+        "custom_llm_base_url": s.custom_llm_base_url,
+        "custom_llm_model": s.custom_llm_model,
+        "custom_llm_disable_thinking": s.custom_llm_disable_thinking,
+        "local_ai_auto": s.local_ai_auto,
         "selected_microphone": s.selected_microphone,
         "appearance_mode": s.appearance_mode,
         "text_improvement": asdict(s.text_improvement),
@@ -167,11 +213,49 @@ def _save_settings(s: AppSettings) -> None:
         "emoji_text": asdict(s.emoji_text),
         "protokoll": asdict(s.protokoll),
     }
+    # Erst vollständig in eine Nebendatei schreiben, dann ersetzen: Ein Absturz mitten im
+    # Schreiben oder zwei Threads zugleich hinterlassen sonst eine halbe settings.json.
+    path = _settings_path()
+    with _SAVE_LOCK:
+        try:
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+        except Exception:
+            pass
+
+
+LOCAL_AI_SETUP_FILE = "lokale_ki_einrichten.json"
+
+
+def _apply_local_ai_setup(s: AppSettings) -> bool:
+    """Übernimmt einmalig, was der Installer für die lokale KI eingerichtet hat.
+
+    Der Installer legt dazu eine kleine Datei neben settings.json ab (Anbieter,
+    Adresse, Modell). Sie wird beim nächsten Start übernommen und gelöscht.
+    """
+    path = os.path.join(os.path.dirname(_settings_path()), LOCAL_AI_SETUP_FILE)
+    if not os.path.exists(path):
+        return False
     try:
-        with open(_settings_path(), "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        with open(path, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        model = str(data.get("model", "")).strip()
+        if not model:
+            return False
+        s.llm_provider = "custom"
+        s.custom_llm_base_url = str(data.get("base_url", "")).strip() or s.custom_llm_base_url
+        s.custom_llm_model = model
+        _save_settings(s)
+        return True
     except Exception:
-        pass
+        return False
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 # ------------------------------------------------------------------
@@ -184,12 +268,17 @@ AppStateCallback = Callable[["AppState"], None]
 def _apply_model_overrides(s: AppSettings) -> None:
     from services import llm_service, transcription_service
     llm_service.set_models(s.openai_model_fast, s.openai_model_quality)
+    llm_service.configure_provider(
+        s.llm_provider, s.custom_llm_base_url, s.custom_llm_model,
+        s.custom_llm_disable_thinking,
+    )
     transcription_service.set_transcription_model(s.openai_transcription_model)
 
 
 class AppState:
     def __init__(self):
         self.settings: AppSettings = _load_settings()
+        _apply_local_ai_setup(self.settings)
         _apply_model_overrides(self.settings)
         self.active_workflow: BaseWorkflow | None = None
         self.hotkey_service = HotkeyService()
@@ -198,6 +287,9 @@ class AppState:
         self.notification: str | None = None
         self._subscribers: list[AppStateCallback] = []
         self._target_hwnd: int = 0
+        # Empfänger für diktierten Text der Notiz (das Notiz-Fenster); wird aus einem
+        # Hintergrund-Thread aufgerufen.
+        self.note_listener: Callable[[str], None] | None = None
         self._lock = threading.Lock()
         # Hotkey-Events (Press/Release) laufen über eine Queue durch genau
         # einen Worker-Thread. Das garantiert, dass ein Release erst nach dem
@@ -266,7 +358,36 @@ class AppState:
         with self._lock:
             self._target_hwnd = hwnd
 
+    def _processing_blocks_start(self) -> bool:
+        """Ein neuer Start würde ein Diktat zerstören, das gerade verarbeitet wird
+        (früher brach jeder Tastendruck es stillschweigend ab). Abbrechen geht bewusst
+        über einen Klick auf die laufende Kachel."""
+        with self._lock:
+            wf = self.active_workflow
+        if wf and wf.state.phase == WorkflowPhase.PROCESSING:
+            self.notification = "Das letzte Diktat wird noch verarbeitet – bitte kurz warten."
+            self._notify()
+            return True
+        return False
+
+    def setup_busy(self) -> str | None:
+        """Text, solange die Einrichtung noch läuft (lokale KI, Spracherkennungs-Modell) –
+        dann ist Blitzdiktat noch nicht benutzbar. None = alles bereit."""
+        from services import local_ai_setup, local_transcription_service
+        if local_ai_setup.is_working():
+            return local_ai_setup.status.message or "Lokale KI wird eingerichtet …"
+        if local_transcription_service.is_preloading() and self.settings.transcription_backend == "local":
+            return "Lade das Spracherkennungs-Modell (ca. 500 MB) …"
+        return None
+
     def start_workflow(self, wtype: WorkflowType) -> None:
+        busy = self.setup_busy()
+        if busy:
+            self.notification = f"Blitzdiktat richtet sich noch ein – bitte warten. {busy}"
+            self._notify()
+            return
+        if self._processing_blocks_start():
+            return
         if not self.is_configured:
             # Nicht still zurückkehren: Hotkey ohne Konfiguration war das
             # FAQ-Symptom "Es passiert nichts". Einmalige Meldung setzen —
@@ -274,6 +395,20 @@ class AppState:
             self.notification = self.config_error
             self._notify()
             return
+
+        # Alle Funktionen außer dem reinen Diktat brauchen die Text-KI. Fehlt
+        # sie, vor der Aufnahme melden – sonst fiel es erst nach dem Sprechen
+        # auf und das Diktat war verloren.
+        if wtype not in (WorkflowType.TRANSCRIPTION, WorkflowType.NOTIZ):
+            from services import llm_service
+            problem = llm_service.config_problem()
+            if problem:
+                from services import local_ai_setup
+                if local_ai_setup.is_working():
+                    problem = f"Die lokale KI wird noch eingerichtet – {local_ai_setup.status.message}"
+                self.notification = problem
+                self._notify()
+                return
 
         self._stop_active()
 
@@ -298,22 +433,30 @@ class AppState:
             workflow = TextImprovementWorkflow(
                 settings=s.text_improvement, language=s.language,
                 backend=backend, local_model=local_model, device=device,
+                custom_terms=all_terms,
             )
         elif wtype == WorkflowType.DAMPF_ABLASSEN:
             workflow = DampfAblassenWorkflow(
                 settings=s.dampf_ablassen, language=s.language,
                 backend=backend, local_model=local_model, device=device,
+                custom_terms=all_terms,
             )
         elif wtype == WorkflowType.EMOJI_TEXT:
             workflow = EmojiTextWorkflow(
                 settings=s.emoji_text, language=s.language,
                 backend=backend, local_model=local_model, device=device,
+                custom_terms=all_terms,
             )
         elif wtype == WorkflowType.PROTOKOLL:
             workflow = ProtokollWorkflow(
                 settings=s.protokoll, language=s.language,
                 backend=backend, local_model=local_model, device=device,
                 custom_terms=all_terms,
+            )
+        elif wtype == WorkflowType.NOTIZ:
+            workflow = NotizWorkflow(
+                language=s.language, custom_terms=all_terms,
+                backend=backend, local_model=local_model, device=device,
             )
         else:
             return
@@ -337,7 +480,18 @@ class AppState:
             wf.stop()
 
     def import_file_for_protokoll(self, path: str) -> None:
-        if not self.is_configured:
+        busy = self.setup_busy()
+        if busy:
+            self.notification = f"Blitzdiktat richtet sich noch ein – bitte warten. {busy}"
+            self._notify()
+            return
+        if self._processing_blocks_start():
+            return
+        from services import llm_service
+        problem = (None if self.is_configured else self.config_error) or llm_service.config_problem()
+        if problem:
+            self.notification = problem
+            self._notify()
             return
         self._stop_active()
         s = self.settings
@@ -373,6 +527,59 @@ class AppState:
         _apply_model_overrides(self.settings)
         self._rebind_hotkeys()
 
+    def save_ai_settings(self) -> None:
+        """Speichert und übernimmt die KI-Einstellungen – ohne die Tastenkürzel neu zu binden
+        (für Aufrufe aus Hintergrund-Threads)."""
+        _save_settings(self.settings)
+        _apply_model_overrides(self.settings)
+
+    def start_local_ai_setup(self, force: bool = False) -> None:
+        """Richtet die lokale KI im Hintergrund ein bzw. prüft sie (siehe local_ai_setup)."""
+        from services import local_ai_setup
+        if not getattr(AppState, "_setup_listener_added", False):
+            local_ai_setup.subscribe(lambda status: self._notify())
+            AppState._setup_listener_added = True
+
+        def notify(message: str) -> None:
+            self.notification = message
+            self._notify()
+
+        if local_ai_setup.needs_local_ai(self.settings) or force:
+            local_ai_setup.mark_starting()             # ab jetzt gesperrt, bis alles fertig ist
+
+        def worker() -> None:
+            try:
+                local_ai_setup.run(self.settings, self.save_ai_settings, notify, force)
+            except Exception as e:                     # nie dauerhaft gesperrt bleiben
+                local_ai_setup._set(local_ai_setup.FAILED, f"Unerwarteter Fehler: {str(e)[:120]}")
+
+        threading.Thread(target=worker, daemon=True, name="local-ai-setup").start()
+
+    def heal_local_model(self, names: list[str] | None = None) -> bool:
+        """Korrigiert einen Modellnamen, den der eigene Server so nicht mehr kennt.
+
+        LM Studio benennt Modelle um, wenn sie über seinen Katalog geladen werden
+        (z. B. "gemma-4-e2b-it" → "google/gemma-4-e2b"); das gespeicherte Modell
+        liefe dann ins Leere. True = Einstellung wurde angepasst.
+        """
+        s = self.settings
+        if s.llm_provider != "custom" or not s.custom_llm_model:
+            return False
+        from services import credentials_service, llm_service, model_catalog
+        if names is None:
+            try:
+                names = llm_service.list_models(
+                    s.custom_llm_base_url, credentials_service.load_custom_api_key() or "", timeout=5,
+                )
+            except Exception:
+                return False
+        fixed = model_catalog.resolve_model(s.custom_llm_model, names)
+        if not fixed:
+            return False
+        s.custom_llm_model = fixed
+        self.save_ai_settings()
+        return True
+
     # ------------------------------------------------------------------
     # Hotkey wiring
     # ------------------------------------------------------------------
@@ -399,6 +606,7 @@ class AppState:
         _bind(s.hotkey_dampf_ablassen, WorkflowType.DAMPF_ABLASSEN)
         _bind(s.hotkey_emoji_text, WorkflowType.EMOJI_TEXT)
         _bind(s.hotkey_protokoll, WorkflowType.PROTOKOLL)
+        _bind(s.hotkey_notiz, WorkflowType.NOTIZ)
 
     def _hotkey_press(self, wtype: WorkflowType) -> None:
         # Zielfenster sofort erfassen (schneller Win32-Call), damit der
@@ -443,6 +651,15 @@ class AppState:
         workflow_name = wf.workflow_type.display_name
         wf_type = wf.workflow_type
 
+        if wf_type == WorkflowType.NOTIZ:
+            # Die Notiz geht ins Notiz-Fenster, nicht ins Zielfenster.
+            listener = self.note_listener
+            if listener:
+                listener(text)
+            threading.Thread(target=save_transcript, args=(text, workflow_name), daemon=True).start()
+            self._notify()
+            return
+
         threading.Thread(
             target=paste_service.paste_to_window,
             args=(hwnd, text),
@@ -459,13 +676,15 @@ class AppState:
                 args=(text,),
                 daemon=True,
             ).start()
-        # Vokabular-Extraktion nutzt die OpenAI-API. Beim reinen Blitzdiktat mit
-        # lokalem Backend darf nichts das Gerät verlassen — dort überspringen.
+        # Vokabular-Extraktion nutzt die Text-KI (OpenAI oder eigener Server).
+        # Beim reinen Blitzdiktat mit lokalem Backend darf nichts das Gerät
+        # verlassen — dort überspringen.
         is_fully_local = (
             wf_type == WorkflowType.TRANSCRIPTION
             and self.settings.transcription_backend == "local"
         )
-        if credentials_service.is_configured() and not is_fully_local:
+        from services import llm_service
+        if llm_service.is_available() and not is_fully_local:
             threading.Thread(
                 target=self._extract_vocabulary_bg,
                 args=(text,),

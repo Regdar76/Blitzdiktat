@@ -52,9 +52,17 @@ class HotkeyService:
     # Internals
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _parse(combo: str) -> frozenset[str]:
-        return frozenset(combo.lower().split("+"))
+    # Deutsche Tastennamen und Leerzeichen verstehen: "Strg + Umschalt + R" passte früher
+    # nie auf ein Tastenkürzel und blieb ohne jede Meldung wirkungslos.
+    _ALIASES = {
+        "strg": "ctrl", "steuerung": "ctrl", "control": "ctrl",
+        "umschalt": "shift", "umschalttaste": "shift", "option": "alt",
+    }
+
+    @classmethod
+    def _parse(cls, combo: str) -> frozenset[str]:
+        parts = (p.strip() for p in combo.lower().split("+"))
+        return frozenset(cls._ALIASES.get(p, p) for p in parts if p)
 
     def _current(self) -> frozenset[str]:
         return frozenset(self._active_mods | self._active_chars)

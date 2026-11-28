@@ -22,6 +22,7 @@ BlitzdiktatWin/dist/
 # Installer nie einchecken — Verteilung über GitHub Releases
 BlitzdiktatWin/Blitzdiktat-Windows-Setup-*.exe
 BlitzdiktatWin/Setup-Blitzdiktat-*.exe
+BlitzdiktatWin/Setup Blitzdiktat *.exe
 *.egg-info/
 
 # Xcode
@@ -59,3 +60,8 @@ node_modules/
 
 # Claude Code lokale Einstellungen
 .claude/settings.local.json
+
+# Modellvergleich: nur Werkzeug und Berichte einchecken, keine Rohdaten
+tools/modellvergleich/ergebnisse/audio/
+tools/modellvergleich/ergebnisse/runde2/
+tools/modellvergleich/ergebnisse/*.json

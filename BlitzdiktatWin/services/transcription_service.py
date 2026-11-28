@@ -80,7 +80,8 @@ async def _transcribe_online(
         raise RuntimeError("OpenAI API Key fehlt. Bitte in den Einstellungen hinterlegen.")
 
     client = AsyncOpenAI(api_key=api_key, timeout=120.0, max_retries=1)
-    prompt = ", ".join(custom_terms) if custom_terms else None
+    from . import vocabulary_service
+    prompt = ", ".join(vocabulary_service.prompt_terms(custom_terms or [])) or None
 
     with open(audio_path, "rb") as f:
         kwargs: dict = dict(model=_transcription_model, file=f, language=language)

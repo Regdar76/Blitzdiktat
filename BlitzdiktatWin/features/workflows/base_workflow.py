@@ -23,6 +23,7 @@ class WorkflowType(Enum):
     DAMPF_ABLASSEN = "dampfAblassen"
     EMOJI_TEXT = "emojiText"
     PROTOKOLL = "protokoll"
+    NOTIZ = "notiz"
 
     @property
     def display_name(self) -> str:
@@ -32,6 +33,7 @@ class WorkflowType(Enum):
             "dampfAblassen": "Blitzdiktat $%&!",
             "emojiText": "Blitzdiktat :)",
             "protokoll": "Blitzdiktat Protokoll",
+            "notiz": "Blitzdiktat Notiz",
         }[self.value]
 
     @property
@@ -42,6 +44,7 @@ class WorkflowType(Enum):
             "dampfAblassen": "Frust rein. Entspannt raus.",
             "emojiText": "Text rein. Emojis dazu.",
             "protokoll": "Besprechung rein. Protokoll raus.",
+            "notiz": "Lesen, bearbeiten, kopieren.",
         }[self.value]
 
     @property
@@ -52,6 +55,7 @@ class WorkflowType(Enum):
             "dampfAblassen": "#F97316",
             "emojiText": "#06B6D4",
             "protokoll": "#059669",
+            "notiz": "#475569",
         }[self.value]
 
     @property
@@ -62,6 +66,7 @@ class WorkflowType(Enum):
             "dampfAblassen": "🔥",
             "emojiText": "😊",
             "protokoll": "📋",
+            "notiz": "📝",
         }[self.value]
 
 
