@@ -68,7 +68,7 @@ Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cr
 
 ; Whisper-Small-Modell vorab einbündeln (in AppData des Nutzers ablegen)
 Source: "dist\whisper_models\*"; DestDir: "{userappdata}\Blitzdiktat\whisper_models"; \
-    Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist; Check: WhisperModelExists
+    Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
 ; Startmenü
@@ -80,7 +80,7 @@ Name: "{group}\{#AppName} deinstallieren";     Filename: "{uninstallexe}"
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: string; ValueName: "{#AppName}"; \
     ValueData: """{app}\{#AppExeName}"""; \
-    Flags: uninsdeletevalue
+    Flags: uninsdeletevalue; Check: IsFreshInstall
 
 [Run]
 ; Blitzdiktat startet nach der Installation von selbst (nicht bei /SILENT).
@@ -101,10 +101,15 @@ Type: filesandordirs; Name: "{localappdata}\Blitzdiktat\Audioaufnahmen"
 #include "installer_lokale_ki.iss"
 
 [Code]
-// ── Prüft ob das vorgebaute Whisper-Modell im Source-Verzeichnis vorhanden ist
-function WhisperModelExists(): Boolean;
+var
+  // War Blitzdiktat schon installiert? Dann ist dies ein Update.
+  WasInstalled: Boolean;
+
+// ── Autostart nur bei der ersten Installation eintragen ────────────────────
+// Bei Updates bleibt die Wahl des Anwenders (Einstellungen → Windows-Start) erhalten.
+function IsFreshInstall(): Boolean;
 begin
-  Result := DirExists(ExpandConstant('{src}\dist\whisper_models'));
+  Result := not WasInstalled;
 end;
 
 // ── Keine Auswahlseiten: Aufgaben (lokale KI) gelten mit ihren Vorgaben ────
@@ -119,6 +124,8 @@ var
   ResultCode: Integer;
 begin
   Result := True;
+  WasInstalled := RegKeyExists(HKEY_CURRENT_USER,
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#AppName}_is1');
   // Laufende Instanz beenden falls vorhanden
   Exec('taskkill.exe', '/f /im Blitzdiktat.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;

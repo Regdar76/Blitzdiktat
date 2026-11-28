@@ -110,8 +110,18 @@ def _run(args: list[str], timeout: float = 20) -> str:
     return ""
 
 
+def _nvidia_smi() -> str | None:
+    """Fester Pfad (der NVIDIA-Treiber legt das Programm in System32 ab). Ein bloßer Name
+    würde auch im aktuellen Ordner gesucht – dort könnte ein fremdes Programm liegen."""
+    path = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "nvidia-smi.exe")
+    return path if os.path.isfile(path) else None
+
+
 def _gpus_from_nvidia_smi() -> list[Gpu]:
-    return parse_nvidia_smi(_run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"]))
+    exe = _nvidia_smi()
+    if not exe:
+        return []
+    return parse_nvidia_smi(_run([exe, "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"]))
 
 
 def _gpus_from_lms() -> list[Gpu]:

@@ -95,7 +95,9 @@ def find_lms() -> str | None:
     for path in candidates:
         if os.path.isfile(path):
             return path
-    return shutil.which("lms")
+    # Bewusst keine Suche über PATH: Sie schließt den aktuellen Ordner ein, und dort
+    # könnte ein fremdes "lms.exe" liegen.
+    return None
 
 
 def find_app() -> str | None:

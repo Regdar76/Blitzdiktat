@@ -19,9 +19,11 @@ class DampfAblassenWorkflow(RecordingWorkflow):
         backend: str = "online",
         local_model: str = "small",
         device: int | None = None,
+        custom_terms: list[str] | None = None,
     ):
         super().__init__(
             WorkflowType.DAMPF_ABLASSEN,
+            custom_terms=custom_terms,
             settings=settings,
             language=language,
             backend=backend,

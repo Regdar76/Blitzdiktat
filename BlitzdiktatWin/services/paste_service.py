@@ -230,6 +230,8 @@ def _insert_via_replacesel(hctrl: int, text: str) -> bool:
     wParam=1 keeps the operation on the control's undo stack.
     """
     before = int(_user32.SendMessageW(hctrl, _WM_GETTEXTLENGTH, 0, 0))
+    # Klassische Eingabefelder brauchen CR+LF; ein einzelnes LF zeigten sie als eine Zeile.
+    text = text.replace("\r\n", "\n").replace("\n", "\r\n")
     buf = ctypes.create_unicode_buffer(text)
     _user32.SendMessageW(hctrl, _EM_REPLACESEL, 1,
                          ctypes.cast(buf, ctypes.c_void_p).value)
@@ -276,6 +278,7 @@ def _write_clipboard(text: str) -> bool:
             _log("_write_clipboard: SetClipboardData failed")
             return False
         transferred = True
+        _keep_out_of_cloud()
         _log(f"_write_clipboard: {len(text)} chars written OK")
         return True
     except Exception as exc:
@@ -285,6 +288,25 @@ def _write_clipboard(text: str) -> bool:
         if hmem and not transferred:
             _kernel32.GlobalFree(hmem)
         _user32.CloseClipboard()
+
+
+def _keep_out_of_cloud() -> None:
+    """Diktate nicht in die Cloud-Zwischenablage von Windows hochladen (geräteübergreifende
+    Synchronisierung). Der lokale Verlauf (Win+V) bleibt nutzbar. Nur mit offener
+    Zwischenablage aufrufen; ein Fehler hier darf das Einfügen nie stören."""
+    try:
+        _user32.RegisterClipboardFormatW.argtypes = [ctypes.c_wchar_p]
+        _user32.RegisterClipboardFormatW.restype = ctypes.wintypes.UINT
+        fmt = _user32.RegisterClipboardFormatW("CanUploadToCloudClipboard")
+        if not fmt:
+            return
+        hmem = _kernel32.GlobalAlloc(0x0042, 4)          # DWORD 0 = nicht hochladen
+        if not hmem:
+            return
+        if not _user32.SetClipboardData(fmt, hmem):
+            _kernel32.GlobalFree(hmem)
+    except Exception:
+        pass
 
 
 def _get_focused_child(hwnd: int) -> int:
@@ -337,7 +359,10 @@ def _attach_focus_paste(hwnd: int) -> None:
     _log(f"_attach_focus_paste: att_fg={att_fg}, att_tgt={att_tgt}")
 
     try:
-        _user32.ShowWindow(hwnd, _SW_RESTORE)
+        # Nur ein minimiertes Fenster wiederherstellen: SW_RESTORE verkleinert sonst ein
+        # maximiertes Zielfenster (Word, Browser) bei jedem Einfügen.
+        if _user32.IsIconic(hwnd):
+            _user32.ShowWindow(hwnd, _SW_RESTORE)
         _user32.BringWindowToTop(hwnd)
         set_fg_ok = bool(_user32.SetForegroundWindow(hwnd))
         _log(f"_attach_focus_paste: SetForegroundWindow={set_fg_ok}")

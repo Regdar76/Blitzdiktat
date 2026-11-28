@@ -257,13 +257,34 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         lang_menu.pack(anchor="w", pady=(0, 12))
 
+        # ---- Windows-Start ------------------------------------------
+        from services import autostart_service
+        self._section(scroll, "Windows-Start")
+        self._autostart_var = ctk.BooleanVar(value=autostart_service.is_enabled())
+        self._autostart_switch = ctk.CTkSwitch(
+            scroll, text="Blitzdiktat mit Windows starten",
+            variable=self._autostart_var, command=self._on_autostart_change,
+        )
+        self._autostart_switch.pack(anchor="w", pady=(0, 2))
+        if not autostart_service.is_supported():
+            self._autostart_switch.configure(state="disabled")
+        ctk.CTkLabel(
+            scroll,
+            text=("Damit die Tastenkürzel nach dem Hochfahren sofort funktionieren."
+                  if autostart_service.is_supported()
+                  else "Nur im installierten Programm verfügbar (nicht beim Start aus dem Quellcode)."),
+            font=ctk.CTkFont(size=11), text_color=("#6B7280", "#9CA3AF"), wraplength=440, justify="left",
+        ).pack(anchor="w", pady=(0, 12))
+
         # ---- Gelerntes Vokabular -----------------------------------
         from services import vocabulary_service
         self._section(scroll, "Gelerntes Vokabular")
         ctk.CTkLabel(
             scroll,
-            text="Automatisch gelernte Begriffe — ein Begriff pro Zeile. "
-                 "Direkt bearbeiten, manuell ergänzen oder einzelne Einträge löschen.",
+            text="Namen und Fachbegriffe in der richtigen Schreibweise — ein Begriff pro Zeile. "
+                 "Blitzdiktat schreibt sie nach jedem Diktat so, wie sie hier stehen "
+                 "(z. B. „Thorben“ statt „Torben“). Eine falsche Schreibweise einfach löschen; "
+                 "eigene Ersetzungen als „falsch -> richtig“ eintragen.",
             font=ctk.CTkFont(size=11),
             text_color=("#6B7280", "#9CA3AF"),
             wraplength=440,
@@ -271,7 +292,7 @@ class SettingsWindow(ctk.CTkToplevel):
         ).pack(anchor="w", pady=(0, 4))
 
         self._vocab_box = ctk.CTkTextbox(scroll, width=400, height=150)
-        self._vocab_box.insert("1.0", "\n".join(vocabulary_service.get_learned_terms()))
+        self._vocab_box.insert("1.0", "\n".join(vocabulary_service.user_lines()))
         self._vocab_box.pack(anchor="w", pady=(0, 6))
 
         _vocab_btn_row = ctk.CTkFrame(scroll, fg_color="transparent")
@@ -437,6 +458,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self._adv_toggle.pack(side="left")
         self._adv = ctk.CTkFrame(scroll, fg_color="transparent")
         self._adv_open = False
+        self._adv_was_opened = False
         self._setup_was_busy = False
         self._tick_auto_status()
         scroll = self._adv          # alles Weitere gehört zur eingeklappten Ansicht
@@ -544,19 +566,24 @@ class SettingsWindow(ctk.CTkToplevel):
         from features.ui.help_window import HelpWindow
         HelpWindow(self, settings=self._app.settings)
 
+    def _on_autostart_change(self) -> None:
+        from services import autostart_service
+        wanted = bool(self._autostart_var.get())
+        if autostart_service.set_enabled(wanted):
+            self._show_toast("Startet mit Windows ✓" if wanted else "Startet nicht mehr mit Windows ✓")
+        else:
+            self._autostart_var.set(autostart_service.is_enabled())
+            self._show_toast("Autostart konnte nicht geändert werden")
+
     def _save_vocabulary(self) -> None:
         from services import vocabulary_service
         raw = self._vocab_box.get("1.0", "end").strip()
-        terms = [t.strip() for t in raw.splitlines() if t.strip()]
-        seen: set[str] = set()
-        unique: list[str] = []
-        for t in terms:
-            if t.lower() not in seen:
-                seen.add(t.lower())
-                unique.append(t)
-        vocabulary_service.clear()
-        vocabulary_service.add_terms(unique)
-        self._show_toast(f"{len(unique)} Begriff{'e' if len(unique) != 1 else ''} gespeichert ✓")
+        count, fixes = vocabulary_service.save_user_list(raw.splitlines())
+        # Liste neu anzeigen: gelöschte Varianten erscheinen jetzt als "falsch -> richtig".
+        self._vocab_box.delete("1.0", "end")
+        self._vocab_box.insert("1.0", "\n".join(vocabulary_service.user_lines()))
+        extra = f", {fixes} Korrektur{'en' if fixes != 1 else ''}" if fixes else ""
+        self._show_toast(f"{count} Begriff{'e' if count != 1 else ''}{extra} gespeichert ✓")
 
     def _clear_vocabulary(self) -> None:
         from services import vocabulary_service
@@ -721,6 +748,7 @@ class SettingsWindow(ctk.CTkToplevel):
     def _toggle_advanced(self) -> None:
         self._adv_open = not self._adv_open
         if self._adv_open:
+            self._adv_was_opened = True
             self._adv.pack(anchor="w", fill="x", after=self._adv_toggle.master)
             self._adv_toggle.configure(text="Erweitert ▴")
         else:
@@ -821,6 +849,9 @@ class SettingsWindow(ctk.CTkToplevel):
             )
             return
         aktiv = "" if s.llm_provider == "custom" else "  (oben „Eigener Server“ wählen, um ihn zu nutzen)"
+        from services import local_server
+        if url.lower().startswith("http://") and not local_server.is_local_url(url):
+            aktiv += "  ⚠️ Unverschlüsselt (http): Diktate und Schlüssel gehen im Klartext an diesen Server."
         self._custom_status.configure(
             text=f"✅  Verbunden – {len(models)} Modell{'e' if len(models) != 1 else ''} gefunden. "
                  f"Gewählt: {chosen}{aktiv}",
@@ -863,14 +894,17 @@ class SettingsWindow(ctk.CTkToplevel):
         s.emoji_text.emoji_density = self._emoji_var.get()
         s.protokoll.system_prompt = self._protokoll_prompt.get("1.0", "end").strip()
 
-        # Eigener KI-Server: getippte Adresse/Modell auch ohne Verbindungstest übernehmen.
-        from services import llm_service
-        s.llm_provider = self._provider_var.get()
-        s.custom_llm_base_url = (
-            llm_service.normalize_base_url(self._custom_url_entry.get())
-            or llm_service.DEFAULT_CUSTOM_BASE_URL
-        )
-        s.custom_llm_model = self._custom_model_var.get().strip()
+        # Eigener KI-Server: getippte Adresse/Modell auch ohne Verbindungstest übernehmen –
+        # aber nur, wenn "Erweitert" geöffnet wurde. Sonst überschrieben die beim Öffnen des
+        # Fensters eingelesenen Werte das, was die automatische Einrichtung inzwischen gesetzt hat.
+        if self._adv_was_opened:
+            from services import llm_service
+            s.llm_provider = self._provider_var.get()
+            s.custom_llm_base_url = (
+                llm_service.normalize_base_url(self._custom_url_entry.get())
+                or llm_service.DEFAULT_CUSTOM_BASE_URL
+            )
+            s.custom_llm_model = self._custom_model_var.get().strip()
 
         # Kein Neustart nötig: save_settings() bindet die Hotkeys live neu,
         # alle übrigen Einstellungen werden beim nächsten Workflow-Start

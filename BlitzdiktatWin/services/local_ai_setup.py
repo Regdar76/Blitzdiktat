@@ -38,6 +38,7 @@ IDLE, WORKING, READY, FAILED, NOT_NEEDED = "idle", "working", "ready", "failed",
 OWNERSHIP_FILE = "lokale_ki_installiert.json"
 _EXTRA_FREE_GB = 3.0          # Reserve neben dem Modell (Bildanhang, Zwischendateien)
 _LM_STUDIO_FREE_GB = 4.0
+INSTALL_RETRY_HOURS = 6.0     # nach gescheiterter LM-Studio-Installation so lange nicht erneut laden
 
 
 class SetupError(Exception):
@@ -109,9 +110,17 @@ def needs_local_ai(settings) -> bool:
 
 # ── Merkdatei (die Deinstallation entfernt, was Blitzdiktat installiert hat) ─
 
-def remember_ownership(lmstudio: bool | None = None, gemma: bool | None = None) -> None:
-    """Gleicher Aufbau wie im Setup: {"lmstudio": true, "gemma": false}; "true" bleibt erhalten."""
-    flags = {"lmstudio": False, "gemma": False}
+def remember_ownership(
+    lmstudio: bool | None = None, gemma: bool | None = None, lmstudio_data: bool | None = None,
+) -> None:
+    """Gleicher Aufbau wie im Setup; ein früheres "true" bleibt erhalten.
+
+    lmstudio       Blitzdiktat hat das Programm installiert → Deinstallation entfernt es.
+    lmstudio_data  Auch der Datenordner (.lmstudio: Modelle, Chats) entstand erst durch uns →
+                   darf gelöscht werden. Gab es ihn schon vorher, bleibt er unangetastet.
+    gemma          Das Gemma-Modell hat das Setup geladen.
+    """
+    flags = {"lmstudio": False, "gemma": False, "lmstudio_data": False}
     try:
         with open(ownership_path(), "r", encoding="utf-8-sig") as f:
             flags.update({k: bool(v) for k, v in json.load(f).items() if k in flags})
@@ -121,8 +130,12 @@ def remember_ownership(lmstudio: bool | None = None, gemma: bool | None = None) 
         flags["lmstudio"] = True
     if gemma:
         flags["gemma"] = True
+    if lmstudio_data:
+        flags["lmstudio_data"] = True
     os.makedirs(_appdata_dir(), exist_ok=True)
-    text = '{"lmstudio": %s, "gemma": %s}' % (str(flags["lmstudio"]).lower(), str(flags["gemma"]).lower())
+    text = '{"lmstudio": %s, "gemma": %s, "lmstudio_data": %s}' % tuple(
+        str(flags[k]).lower() for k in ("lmstudio", "gemma", "lmstudio_data")
+    )
     with open(ownership_path(), "w", encoding="utf-8") as f:
         f.write(text)
 
@@ -176,31 +189,74 @@ def _desktop_shortcuts() -> list[str]:
     return [os.path.join(f, "LM Studio.lnk") for f in folders]
 
 
+def _sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower()
+
+
+def _failure_path() -> str:
+    return os.path.join(_appdata_dir(), "lokale_ki_fehler.json")
+
+
+def install_failed_recently() -> bool:
+    """Die Installation von LM Studio ist vor Kurzem gescheitert – nicht bei jedem
+    Programmstart erneut 650 MB laden."""
+    try:
+        with open(_failure_path(), "r", encoding="utf-8") as f:
+            return time.time() - float(json.load(f).get("time", 0)) < INSTALL_RETRY_HOURS * 3600
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+
+
+def _note_install_failure(failed: bool) -> None:
+    try:
+        if failed:
+            os.makedirs(_appdata_dir(), exist_ok=True)
+            with open(_failure_path(), "w", encoding="utf-8") as f:
+                json.dump({"time": time.time()}, f)
+        elif os.path.exists(_failure_path()):
+            os.remove(_failure_path())
+    except OSError:
+        pass
+
+
 def install_lm_studio(progress: Callable[..., None]) -> None:
     """Lädt LM Studio (feste Version, Prüfsumme) und installiert es still."""
     if _free_gb(os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))) < _LM_STUDIO_FREE_GB:
         raise SetupError("Zu wenig freier Speicherplatz für LM Studio.")
-    setup = os.path.join(tempfile.gettempdir(), "Blitzdiktat-LM-Studio-Setup.exe")
-    _download_file(LM_STUDIO_URL, setup, LM_STUDIO_SHA256, LM_STUDIO_BYTES, progress)
-    progress("Installiere LM Studio …")
+    had_profile = os.path.isdir(os.path.join(os.path.expanduser("~"), ".lmstudio"))
+    # Eigener, frisch angelegter Ordner statt eines festen Namens in %TEMP%, und die
+    # Prüfsumme direkt vor dem Ausführen noch einmal von der Platte: So kann kein anderes
+    # Programm die Datei zwischen Prüfung und Start austauschen.
+    folder = tempfile.mkdtemp(prefix="Blitzdiktat-")
+    setup = os.path.join(folder, "LM-Studio-Setup.exe")
     try:
-        subprocess.run(
-            [setup, "/S"], stdin=subprocess.DEVNULL, capture_output=True, timeout=900,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-    except (OSError, subprocess.SubprocessError) as e:
-        raise SetupError(f"LM Studio ließ sich nicht installieren: {e}") from e
-    finally:
+        _download_file(LM_STUDIO_URL, setup, LM_STUDIO_SHA256, LM_STUDIO_BYTES, progress)
+        progress("Installiere LM Studio …")
+        if _sha256_file(setup) != LM_STUDIO_SHA256.lower():
+            raise SetupError("Der Download von LM Studio ist beschädigt (Prüfsumme stimmt nicht).")
         try:
-            os.remove(setup)
-        except OSError:
-            pass
+            done = subprocess.run(
+                [setup, "/S"], stdin=subprocess.DEVNULL, capture_output=True, timeout=900,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except (OSError, subprocess.SubprocessError) as e:
+            raise SetupError(f"LM Studio ließ sich nicht installieren: {e}") from e
+        if done.returncode != 0:
+            raise SetupError(f"LM Studio ließ sich nicht installieren (Fehlercode {done.returncode}).")
+    finally:
+        import shutil
+        shutil.rmtree(folder, ignore_errors=True)
     deadline = time.monotonic() + 60
     while not local_server.find_app():
         if time.monotonic() > deadline:
             raise SetupError("LM Studio ließ sich nicht installieren.")
         time.sleep(1.0)
-    remember_ownership(lmstudio=True)          # die Deinstallation räumt es wieder auf
+    # Die Deinstallation räumt es wieder auf – den Datenordner nur, wenn er neu ist.
+    remember_ownership(lmstudio=True, lmstudio_data=not had_profile)
     for lnk in _desktop_shortcuts():
         try:
             os.remove(lnk)
@@ -263,7 +319,7 @@ def run(
             _set(NOT_NEEDED, "")
             return
         try:
-            _run(settings, save, notify)
+            _run(settings, save, notify, force)
         except SetupError as e:
             _set(FAILED, str(e))
             if notify:
@@ -282,7 +338,7 @@ def _activate(settings, save, server_name: str) -> None:
     save()
 
 
-def _run(settings, save, notify) -> None:
+def _run(settings, save, notify, force: bool = False) -> None:
     url = llm_service.normalize_base_url(settings.custom_llm_base_url) or llm_service.DEFAULT_CUSTOM_BASE_URL
     key = credentials_service.load_custom_api_key() or ""
     did_work = False
@@ -291,8 +347,18 @@ def _run(settings, save, notify) -> None:
     # Maßgeblich ist das Programm selbst: "lms.exe" im Profil bleibt nach einer
     # Deinstallation liegen und läuft ohne das Programm nicht.
     if not local_server.find_app():
+        if install_failed_recently() and not force:
+            raise SetupError(
+                "LM Studio ließ sich zuletzt nicht installieren. Blitzdiktat versucht es später "
+                "erneut – oder sofort über Einstellungen → „Automatisch einrichten“."
+            )
         _set(WORKING, "Lade LM Studio …")
-        install_lm_studio(lambda text, fraction=None: _set(WORKING, text, fraction))
+        try:
+            install_lm_studio(lambda text, fraction=None: _set(WORKING, text, fraction))
+        except SetupError:
+            _note_install_failure(True)
+            raise
+        _note_install_failure(False)
         did_work = True
 
     _set(WORKING, "Starte die lokale KI …")

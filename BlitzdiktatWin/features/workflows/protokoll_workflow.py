@@ -98,8 +98,10 @@ class ProtokollWorkflow(RecordingWorkflow):
                 self._set_phase(WorkflowPhase.ERROR, error=f"Nicht unterstütztes Dateiformat: {ext}")
                 return
 
+            from services import vocabulary_service
+            raw = vocabulary_service.apply(raw, self._transcribe_terms())
             self._set_phase(WorkflowPhase.PROCESSING, self.PROCESS_STATUS)
-            protokoll = self._process(raw)
+            protokoll = vocabulary_service.apply(self._process(raw), self._transcribe_terms())
 
             done_status = f"Fertig. ({hint})" if hint else "Fertig."
             self._set_phase(WorkflowPhase.DONE, status=done_status)

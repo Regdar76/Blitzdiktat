@@ -74,6 +74,12 @@ Workflow-Schaltfläche klicken → Aufnahme startet. Nochmals klicken → Aufnah
 **Blitzdiktat Notiz (Strg+Umschalt+N):**
 Der Text erscheint nicht im Zielfenster, sondern in einem kleinen Notiz-Fenster. Dort lässt sich weiter diktieren (hängt an), jeder beliebige Text einfügen (Strg+V oder „Einfügen"), mit „Verbessern", „Beruhigen" und „Emojis" überarbeiten (bei Markierung nur der markierte Teil, sonst der ganze Text) und mit ↶ zurücknehmen. „Kopieren" legt den Text in die Zwischenablage, „Exportieren" speichert ihn als Textdatei oder PDF. Der Entwurf bleibt bis zum nächsten Öffnen erhalten. Das Fenster öffnet sich auch über den Pfeil an der Kachel im Hauptfenster.
 
+**Vokabular (Einstellungen → Gelerntes Vokabular):**
+Namen und Fachbegriffe in der richtigen Schreibweise, ein Begriff pro Zeile. Sie wirken doppelt: als Hinweis an die Spracherkennung und als Korrektur nach dem Diktat. Steht „Thorben" in der Liste, wird ein erkanntes „Torben" ersetzt. Angeglichen werden nur großgeschriebene Wörter ab fünf Buchstaben, die sich durch th/t, ph/f, y/i oder C/K am Wortanfang unterscheiden – gröbere Regeln würden normale Wörter verfälschen. Für alles andere eine eigene Ersetzung eintragen: `falsch -> richtig`. Wer eine falsche Schreibweise aus der Liste löscht, während die richtige stehen bleibt, bekommt automatisch eine solche Ersetzung; die App lernt die falsche Form dann nicht wieder dazu.
+
+**Windows-Start (Einstellungen → Windows-Start):**
+Blitzdiktat startet nach der Installation mit Windows, damit die Tastenkürzel sofort funktionieren. Der Schalter stellt das ab oder wieder an; ein Update ändert die Wahl nicht. Es läuft immer nur eine Instanz – ein zweiter Start zeigt das Fenster der laufenden.
+
 ## Projektstruktur
 
 ```

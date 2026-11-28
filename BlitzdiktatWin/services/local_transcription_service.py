@@ -71,8 +71,12 @@ def transcribe_local(
     model = _load_model(model_name)
 
     kwargs: dict = {"language": language, "beam_size": 5}
-    if custom_terms:
-        kwargs["initial_prompt"] = ", ".join(custom_terms)
+    from . import vocabulary_service
+    hints = vocabulary_service.prompt_terms(custom_terms or [])
+    if hints:
+        # "hotwords" wirkt in jedem 30-Sekunden-Abschnitt, "initial_prompt" nur im ersten –
+        # bei langen Aufnahmen (Protokoll) ginge der Hinweis sonst verloren.
+        kwargs["hotwords"] = ", ".join(hints)
 
     segments, _ = model.transcribe(audio_path, **kwargs)
     return " ".join(seg.text.strip() for seg in segments).strip()

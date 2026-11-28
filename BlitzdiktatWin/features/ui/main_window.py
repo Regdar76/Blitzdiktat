@@ -385,6 +385,8 @@ class MainWindow:
         wf = self._app.active_workflow
         if wf and wf.workflow_type == wtype and wf.is_recording:
             self._app.stop_workflow()
+        elif wf and wf.workflow_type == wtype and wf.state.phase == WorkflowPhase.PROCESSING:
+            self._app.reset_workflow()          # Klick auf die laufende Kachel bricht ab
         else:
             self._app.capture_target_window()
             self._app.start_workflow(wtype)
@@ -551,7 +553,7 @@ class MainWindow:
                 )
                 btn.configure(text=stop_label, state="normal")
                 container.configure(fg_color=wtype.color)
-                sub.configure(text="")          # hide subtitle while active
+                sub.configure(text="" if phase == WorkflowPhase.RECORDING else "Klicken bricht ab")
             else:
                 disabled = active_type is not None or bool(busy)
                 btn.configure(

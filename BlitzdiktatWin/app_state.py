@@ -11,7 +11,7 @@ import threading
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Any
 
-from features.workflows.base_workflow import BaseWorkflow, WorkflowState, WorkflowType
+from features.workflows.base_workflow import BaseWorkflow, WorkflowPhase, WorkflowState, WorkflowType
 from features.workflows.transcription_workflow import TranscriptionWorkflow
 from features.workflows.text_improvement_workflow import TextImprovementWorkflow
 from features.workflows.dampf_ablassen_workflow import DampfAblassenWorkflow
@@ -103,6 +103,21 @@ def _settings_path() -> str:
     return os.path.join(folder, "settings.json")
 
 
+# True, wenn settings.json beim Start nicht lesbar war (die App meldet das dem Nutzer).
+LOAD_PROBLEM = False
+_SAVE_LOCK = threading.Lock()
+
+
+def _keep_broken_settings(path: str) -> None:
+    """Hebt eine unlesbare settings.json auf, bevor sie mit Standardwerten überschrieben wird."""
+    global LOAD_PROBLEM
+    LOAD_PROBLEM = True
+    try:
+        os.replace(path, path + ".defekt")
+    except OSError:
+        pass
+
+
 def _load_settings() -> AppSettings:
     path = _settings_path()
     if not os.path.exists(path):
@@ -110,6 +125,8 @@ def _load_settings() -> AppSettings:
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError("settings.json enthält kein Objekt")
         s = AppSettings()
         s.language = data.get("language", s.language)
         s.has_seen_onboarding = data.get("has_seen_onboarding", s.has_seen_onboarding)
@@ -135,34 +152,36 @@ def _load_settings() -> AppSettings:
         s.selected_microphone = data.get("selected_microphone", s.selected_microphone)
         s.appearance_mode = data.get("appearance_mode", s.appearance_mode)
 
-        ti = data.get("text_improvement", {})
+        ti = data.get("text_improvement") or {}
+        terms = ti.get("custom_terms") or []
         s.text_improvement = TextImprovementSettings(
             system_prompt=ti.get("system_prompt", ""),
-            custom_terms=ti.get("custom_terms", []),
+            custom_terms=[str(t) for t in terms if str(t).strip()] if isinstance(terms, list) else [],
             context=ti.get("context", ""),
             tone=ti.get("tone", "neutral"),
             custom_name=ti.get("custom_name", ""),
         )
 
-        da = data.get("dampf_ablassen", {})
+        da = data.get("dampf_ablassen") or {}
         s.dampf_ablassen = DampfAblassenSettings(
             system_prompt=da.get("system_prompt", ""),
             custom_name=da.get("custom_name", ""),
         )
 
-        et = data.get("emoji_text", {})
+        et = data.get("emoji_text") or {}
         s.emoji_text = EmojiTextSettings(
             emoji_density=et.get("emoji_density", "mittel"),
             custom_name=et.get("custom_name", ""),
         )
 
-        pr = data.get("protokoll", {})
+        pr = data.get("protokoll") or {}
         s.protokoll = ProtokollSettings(
             system_prompt=pr.get("system_prompt", ""),
             custom_name=pr.get("custom_name", ""),
         )
         return s
     except Exception:
+        _keep_broken_settings(path)
         return AppSettings()
 
 
@@ -194,11 +213,17 @@ def _save_settings(s: AppSettings) -> None:
         "emoji_text": asdict(s.emoji_text),
         "protokoll": asdict(s.protokoll),
     }
-    try:
-        with open(_settings_path(), "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    # Erst vollständig in eine Nebendatei schreiben, dann ersetzen: Ein Absturz mitten im
+    # Schreiben oder zwei Threads zugleich hinterlassen sonst eine halbe settings.json.
+    path = _settings_path()
+    with _SAVE_LOCK:
+        try:
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+        except Exception:
+            pass
 
 
 LOCAL_AI_SETUP_FILE = "lokale_ki_einrichten.json"
@@ -333,6 +358,18 @@ class AppState:
         with self._lock:
             self._target_hwnd = hwnd
 
+    def _processing_blocks_start(self) -> bool:
+        """Ein neuer Start würde ein Diktat zerstören, das gerade verarbeitet wird
+        (früher brach jeder Tastendruck es stillschweigend ab). Abbrechen geht bewusst
+        über einen Klick auf die laufende Kachel."""
+        with self._lock:
+            wf = self.active_workflow
+        if wf and wf.state.phase == WorkflowPhase.PROCESSING:
+            self.notification = "Das letzte Diktat wird noch verarbeitet – bitte kurz warten."
+            self._notify()
+            return True
+        return False
+
     def setup_busy(self) -> str | None:
         """Text, solange die Einrichtung noch läuft (lokale KI, Spracherkennungs-Modell) –
         dann ist Blitzdiktat noch nicht benutzbar. None = alles bereit."""
@@ -348,6 +385,8 @@ class AppState:
         if busy:
             self.notification = f"Blitzdiktat richtet sich noch ein – bitte warten. {busy}"
             self._notify()
+            return
+        if self._processing_blocks_start():
             return
         if not self.is_configured:
             # Nicht still zurückkehren: Hotkey ohne Konfiguration war das
@@ -394,16 +433,19 @@ class AppState:
             workflow = TextImprovementWorkflow(
                 settings=s.text_improvement, language=s.language,
                 backend=backend, local_model=local_model, device=device,
+                custom_terms=all_terms,
             )
         elif wtype == WorkflowType.DAMPF_ABLASSEN:
             workflow = DampfAblassenWorkflow(
                 settings=s.dampf_ablassen, language=s.language,
                 backend=backend, local_model=local_model, device=device,
+                custom_terms=all_terms,
             )
         elif wtype == WorkflowType.EMOJI_TEXT:
             workflow = EmojiTextWorkflow(
                 settings=s.emoji_text, language=s.language,
                 backend=backend, local_model=local_model, device=device,
+                custom_terms=all_terms,
             )
         elif wtype == WorkflowType.PROTOKOLL:
             workflow = ProtokollWorkflow(
@@ -442,6 +484,8 @@ class AppState:
         if busy:
             self.notification = f"Blitzdiktat richtet sich noch ein – bitte warten. {busy}"
             self._notify()
+            return
+        if self._processing_blocks_start():
             return
         from services import llm_service
         problem = (None if self.is_configured else self.config_error) or llm_service.config_problem()

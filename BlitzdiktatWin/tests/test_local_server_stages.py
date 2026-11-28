@@ -110,16 +110,6 @@ def test_lm_studio_wird_im_programmordner_gefunden(monkeypatch, tmp_path):
     assert local_server.find_app() == str(exe)
 
 
-def test_lms_aus_dem_suchpfad_wird_als_letztes_mittel_genommen(monkeypatch, tmp_path):
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "leer"))
-    monkeypatch.setenv("ProgramFiles", str(tmp_path / "leer"))
-    monkeypatch.setenv("ProgramFiles(x86)", str(tmp_path / "leer"))
-    monkeypatch.setattr(local_server.shutil, "which", lambda name: r"D:\tools\lms.exe")
-    assert local_server.find_lms() == r"D:\tools\lms.exe"
-
-
 # ── Modell laden ────────────────────────────────────────────────────────────
 
 def test_geladenes_modell_wird_nicht_noch_einmal_geladen(monkeypatch):

@@ -11,7 +11,9 @@ setzen optional `PROCESS_STATUS`.
 import asyncio
 import threading
 
+from services import vocabulary_service
 from services.audio_recorder import AudioRecorder
+from services.transcript_store import save_transcript
 from services.transcription_service import transcribe_sync
 from services.error_handler import friendly_message
 from .base_workflow import BaseWorkflow, WorkflowPhase, WorkflowType
@@ -88,6 +90,7 @@ class RecordingWorkflow(BaseWorkflow):
                 error=self._recorder.error_message or "Keine Aufnahmedatei vorhanden.",
             )
             return
+        raw = ""
         try:
             status = (
                 f"Wird lokal transkribiert ({self._local_model}) ..."
@@ -100,16 +103,28 @@ class RecordingWorkflow(BaseWorkflow):
                 self._backend, self._local_model,
             )
 
+            # Schreibweisen aus dem Vokabular durchsetzen – vor der Verarbeitung (damit
+            # die Text-KI schon die richtigen Namen sieht) und danach (falls sie sie ändert).
+            raw = vocabulary_service.apply(raw, self._transcribe_terms())
             if self.PROCESS_STATUS:
                 self._set_phase(WorkflowPhase.PROCESSING, self.PROCESS_STATUS)
-            result = self._process(raw)
+            result = vocabulary_service.apply(self._process(raw), self._transcribe_terms())
 
             done_status = f"Fertig. ({hint})" if hint else "Fertig."
             self._set_phase(WorkflowPhase.DONE, status=done_status)
             self._emit_output(result)
         except Exception as e:
-            self._set_phase(WorkflowPhase.ERROR, error=friendly_message(e))
-            self._recorder.discard_recording()   # nur bei Fehler löschen
+            # Die Aufnahme bleibt erhalten (wie bei Erfolg, 14 Tage). War die Erkennung
+            # schon fertig und nur die Verarbeitung scheiterte, den erkannten Text sichern –
+            # sonst wäre z. B. ein einstündiges Protokoll bei einem KI-Fehler verloren.
+            note = ""
+            if raw.strip():
+                try:
+                    save_transcript(raw, f"{self.workflow_type.display_name} (Rohtext, Verarbeitung fehlgeschlagen)")
+                    note = " Rohtext gesichert (Transkriptionen)."
+                except Exception:
+                    pass
+            self._set_phase(WorkflowPhase.ERROR, error=friendly_message(e) + note)
 
     def _transcribe_terms(self) -> list[str]:
         if self._custom_terms is not None:

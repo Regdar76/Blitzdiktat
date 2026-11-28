@@ -294,9 +294,9 @@ def test_statusmeldungen_gehen_an_die_zuhoerer(world):
 
 def test_merkdatei_hat_denselben_aufbau_wie_im_setup(world):
     las.remember_ownership(lmstudio=True)
-    assert open(las.ownership_path(), encoding="utf-8").read() == '{"lmstudio": true, "gemma": false}'
+    assert open(las.ownership_path(), encoding="utf-8").read() == '{"lmstudio": true, "gemma": false, "lmstudio_data": false}'
     las.remember_ownership(gemma=True)
-    assert open(las.ownership_path(), encoding="utf-8").read() == '{"lmstudio": true, "gemma": true}'
+    assert open(las.ownership_path(), encoding="utf-8").read() == '{"lmstudio": true, "gemma": true, "lmstudio_data": false}'
 
 
 def test_merkdatei_behaelt_ein_frueheres_true(world):
@@ -364,7 +364,9 @@ def test_installation_still_merkt_sich_und_entfernt_die_desktopverknuepfung(worl
     desktop.mkdir()
     (desktop / "LM Studio.lnk").write_bytes(b"")
     monkeypatch.setattr(las, "_free_gb", lambda p: 500)
-    monkeypatch.setattr(las, "_download_file", lambda *a: None)
+    import hashlib
+    monkeypatch.setattr(las, "LM_STUDIO_SHA256", hashlib.sha256(b"setup").hexdigest())
+    monkeypatch.setattr(las, "_download_file", lambda url, dest, *a: open(dest, "wb").write(b"setup"))
     monkeypatch.setattr(local_server, "find_lms", lambda: "lms.exe")        # Rest der alten Installation
     monkeypatch.setattr(local_server, "find_app", lambda: "LM Studio.exe" if state["installed"] else None)
     monkeypatch.delenv("OneDrive", raising=False)

@@ -16,9 +16,11 @@ class TextImprovementWorkflow(RecordingWorkflow):
         backend: str = "online",
         local_model: str = "small",
         device: int | None = None,
+        custom_terms: list[str] | None = None,
     ):
         super().__init__(
             WorkflowType.TEXT_IMPROVER,
+            custom_terms=custom_terms,
             settings=settings,
             language=language,
             backend=backend,

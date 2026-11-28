@@ -66,6 +66,10 @@ var
   // wird bei der Deinstallation wieder entfernt.
   LMStudioPreExisting: Boolean;
   GemmaPreExisting: Boolean;
+  // Gab es den Datenordner von LM Studio (.lmstudio: Modelle, Chats) schon vorher?
+  // Dann gehört er dem Anwender und wird nie gelöscht – auch wenn das Programm
+  // an einem unüblichen Ort lag und deshalb als "nicht installiert" erkannt wurde.
+  LMStudioDataPreExisting: Boolean;
 
 // ── Ist LM Studio schon installiert? ────────────────────────────────────────
 function LMStudioInstalled(): Boolean;
@@ -107,6 +111,7 @@ var
 begin
   LMStudioPreExisting := LMStudioInstalled();
   GemmaPreExisting := GemmaModelPresent();
+  LMStudioDataPreExisting := DirExists(ExpandConstant('{%USERPROFILE}\.lmstudio'));
   if GetSpaceOnDisk64(ExpandConstant('{%USERPROFILE}'), FreeBytes, TotalBytes) then
     if FreeBytes < Int64(10) * 1073741824 then
     begin
@@ -141,7 +146,9 @@ begin
   ForceDirectories(ExpandConstant('{#MarkerDir}'));
   SaveStringToFile(OwnershipFile(),
     '{"lmstudio": ' + BoolText(Owns('lmstudio') or (not LMStudioPreExisting)) +
-    ', "gemma": ' + BoolText(Owns('gemma') or (not GemmaPreExisting)) + '}',
+    ', "gemma": ' + BoolText(Owns('gemma') or (not GemmaPreExisting)) +
+    ', "lmstudio_data": ' + BoolText(Owns('lmstudio_data')
+        or ((not LMStudioPreExisting) and (not LMStudioDataPreExisting))) + '}',
     False);
 end;
 
@@ -149,8 +156,11 @@ end;
 procedure RemoveLocalAi();
 var
   ResultCode: Integer;
-  AppDir, Uninstaller: String;
+  AppDir, Uninstaller, GemmaDir: String;
+  OwnsData: Boolean;
 begin
+  OwnsData := Owns('lmstudio_data');
+  GemmaDir := ExpandConstant('{%USERPROFILE}\.lmstudio\models\lmstudio-community\gemma-4-E2B-it-GGUF');
   if Owns('lmstudio') then
   begin
     Exec('taskkill.exe', '/f /im "LM Studio.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
@@ -160,11 +170,17 @@ begin
     // "_?=" lässt den Uninstaller an Ort und Stelle laufen, damit wir auf ihn warten können.
     if FileExists(Uninstaller) then
       Exec(Uninstaller, '/currentuser /S _?=' + AppDir, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    // Programm, Modelle (.lmstudio), Einstellungen, Updater, Verknüpfungen, Autostart.
+    // Programm, Updater, Verknüpfungen, Autostart.
     DelTree(AppDir, True, True, True);
-    DelTree(ExpandConstant('{%USERPROFILE}\.lmstudio'), True, True, True);
-    DelTree(ExpandConstant('{userappdata}\LM Studio'), True, True, True);
     DelTree(ExpandConstant('{localappdata}\lm-studio-updater'), True, True, True);
+    // Modelle, Chats und Einstellungen nur, wenn der Datenordner erst durch uns entstand.
+    if OwnsData then
+    begin
+      DelTree(ExpandConstant('{%USERPROFILE}\.lmstudio'), True, True, True);
+      DelTree(ExpandConstant('{userappdata}\LM Studio'), True, True, True);
+    end
+    else if Owns('gemma') then
+      DelTree(GemmaDir, True, True, True);
     DeleteFile(ExpandConstant('{userdesktop}\LM Studio.lnk'));
     DeleteFile(ExpandConstant('{userprograms}\LM Studio.lnk'));
     RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'electron.app.LM Studio');
@@ -173,8 +189,7 @@ begin
   else if Owns('gemma') then
   begin
     // LM Studio war vorher da: nur das von uns geladene Modell entfernen.
-    DelTree(ExpandConstant('{%USERPROFILE}\.lmstudio\models\lmstudio-community\gemma-4-E2B-it-GGUF'),
-            True, True, True);
+    DelTree(GemmaDir, True, True, True);
     Log('Lokale KI: Modell entfernt (LM Studio bleibt, es war schon vorher installiert).');
   end;
   DeleteFile(OwnershipFile());
